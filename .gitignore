@@ -1,0 +1,21 @@
+# Arduino IDE and installer
+Arduino IDE/
+*.exe
+
+# Report templates and documents
+*.docx
+*report*
+*templat*
+
+# Build artifacts and editor files
+build/
+*.hex
+*.bin
+*.elf
+*.o
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
