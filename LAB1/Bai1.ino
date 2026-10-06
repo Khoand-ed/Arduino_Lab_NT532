@@ -1,19 +1,14 @@
 const int ledPins[4] = {5, 4, 3, 2}; 
-
 const int btnCountPin = 8; 
 const int btnDirPin   = 9; 
-
 int counter = 0;              
 bool isCountUp = true;        
-
 int lastBtnCountReading = HIGH;
 int btnCountState = HIGH;
 unsigned long lastDebounceTimeCount = 0;
-
 int lastBtnDirReading = HIGH;
 int btnDirState = HIGH;
 unsigned long lastDebounceTimeDir = 0;
-
 const unsigned long debounceDelay = 50; 
 
 void updateLEDs(int value) {

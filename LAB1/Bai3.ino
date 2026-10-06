@@ -1,34 +1,26 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
 const int potPin = A0;
 const int buttonPin = 2;
-
 enum GameState {
   STATE_INIT,
   STATE_SHOW_SEQUENCE,
   STATE_WAIT_INPUT,
   STATE_GAME_OVER
 };
-
 GameState currentState = STATE_INIT;
-
 int currentRound = 1;
 int sequenceLength = 2;
 int sequence[50];
 int inputIndex = 0;
 int maxSequenceAchieved = 0;
-
 int selectedDigit = 0;
 int lastSelectedDigit = -1;
-
 int lastButtonReading = HIGH;
 int buttonState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
-
 unsigned long inputStartTime = 0;
 const unsigned long inputTimeout = 5000;
 

@@ -1,21 +1,16 @@
 const int ledPins[10] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
 const int potPin = A0;
 const int buttonPin = 12;
-
 enum DisplayMode {
   MODE_BAR = 0,
   MODE_DOT = 1,
   MODE_CENTER = 2
 };
-
 DisplayMode currentMode = MODE_BAR;
-
 int lastButtonReading = HIGH;
 int buttonState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
-
 int lastPercent = -1;
 DisplayMode lastMode = (DisplayMode)-1;
 
