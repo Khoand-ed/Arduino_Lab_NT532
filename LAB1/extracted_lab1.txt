@@ -1,0 +1,386 @@
+Câu hỏi 1
+: 
+B
+ộ
+ đ
+ế
+m nh
+ị
+ phân 4 bit
+Minh chứng:
+ 
+ 
+Hình 1. Khai báo
+ và hàm in trạng thái
+Hình 2. Hàm 
+setup(
+)
+Hình 
+3
+. 
+Hàm 
+loop(
+)
+Hình 4. Sơ đồ nối dây
+Giải thích:
+ 
+Khai báo 4 chân LED (D5, D4, D3, D2) và 2 chân nút nhấn (D8 dùng để đếm và D9 dùng để đổi chiều đếm). 
+Khai báo biến counter để lưu giá trị từ 0 đến 15 và isCountUp để xác định chiều đếm. 
+Trong hàm 
+updateLEDs(
+): 
+Chuyển giá trị counter sang dạng nhị phân 4 bit bằng phép dịch bit. 
+Bật/tắt từng LED tương ứng với từng bit nhị phân. 
+Trong hàm 
+loop(
+): 
+Đọc trạng thái nút Count và sử dụng thời gian chống dội 50 ms để tránh một lần nhấn bị nhận nhiều lần. 
+Khi nhấn nút Count: 
+Tăng counter nếu đang ở chế độ đếm tăng. 
+Giảm counter nếu đang ở chế độ đếm giảm. 
+Nếu giá trị vượt quá 15 thì quay về 0; nếu nhỏ hơn 0 thì quay về 15. 
+Cập nhật trạng thái 4 LED và hiển thị kết quả trên Serial Monitor. 
+Đọc nút Direction và sử dụng chống dội tương tự. 
+Khi nhấn nút Direction, chuyển đổi giữa chế độ đếm tăng và đếm giảm. 
+Hàm 
+printStatus(
+) hiển thị giá trị nhị phân, giá trị thập phân và chiều đếm trên Serial Monitor. 
+Đấu dây:
+Nối 4 LED lần lượt vào các chân 
+D5, D4, D3, D2
+, mỗi LED mắc nối tiếp với 
+điện trở 220–330 Ω
+ để hạn dòng và bảo vệ LED. 
+Chân 
+dương (Anode)
+ của LED nối với chân Arduino thông qua điện trở, chân 
+âm (Cathode)
+ nối với GND. 
+Nối 
+nút Count
+ giữa chân 
+D8 và GND
+. 
+Nối 
+nút Direction
+ giữa chân 
+D9 và GND
+. 
+Hai nút sử dụng chế độ INPUT_PULLUP nên 
+không cần điện trở kéo lên bên ngoài
+. Khi chưa nhấn, chân input ở mức 
+HIGH
+; khi nhấn, chân input được nối xuống GND và trở thành 
+LOW
+. 
+Tất cả các linh kiện sử dụng chung 
+GND của Arduino
+ làm điểm tham chiếu. 
+Câu hỏi 
+2
+: 
+Bộ đếm nhị phân 4 bit
+Minh chứng:
+ 
+ 
+Hình 1. Khai báo
+ và hàm 
+setup(
+)
+ 
+Hình 2. Hàm 
+loop
+(
+)
+Hình 4. Sơ đồ nối dây
+Giải thích:
+Khai báo 
+10 LED
+ nối với các chân 
+D2–D11
+, biến trở nối vào 
+A0
+ và nút nhấn nối vào 
+D12
+. 
+Khai báo 3 chế độ hiển thị: 
+MODE_BAR
+: hiển thị dạng 
+thanh
+, số LED sáng tăng theo mức biến trở. 
+MODE_DOT
+: chỉ 
+một LED
+ sáng và di chuyển theo mức biến trở. 
+MODE_CENTER
+: LED sáng 
+từ giữa ra hai bên
+ theo mức biến trở. 
+Trong hàm 
+loop(
+)
+: 
+Đọc trạng thái nút nhấn và sử dụng 
+debounce 50 ms
+ để tránh nhận nhiều lần khi nhấn nút. 
+Mỗi lần nhấn nút, chuyển lần lượt giữa 3 chế độ hiển thị. 
+Đọc giá trị biến trở bằng 
+analogRead(
+)
+ từ 
+0–1023
+ và chuyển thành mức phần trăm 
+0–100%
+. 
+Dựa vào mức phần trăm và chế độ hiện tại, xác định LED nào sẽ sáng. 
+Gửi trạng thái các LED ra các chân 
+D2–D11
+. 
+Hiển thị mức phần trăm, chế độ và các LED đang sáng trên Serial Monitor. 
+Khi mức biến trở bằng 
+0%
+, tất cả LED đều được tắt. 
+Đấu dây:
+Nối 
+10 LED
+ lần lượt với các chân 
+D2–D11
+, mỗi LED mắc nối tiếp với 
+điện trở 220–330 Ω
+ để hạn dòng và bảo vệ LED. 
+Chân dương của LED nối với Arduino thông qua điện trở, chân âm nối với 
+GND
+. 
+Nối 
+chân giữa (Wiper)
+ của biến trở vào 
+A0
+ để Arduino đọc giá trị điện áp thay đổi. 
+Hai chân còn lại của biến trở nối lần lượt vào 
+5V
+ và 
+GND
+, tạo thành mạch chia điện áp. Khi xoay biến trở, điện áp tại A0 thay đổi từ gần 
+0V đến 5V
+, tương ứng với giá trị ADC khoảng 
+0–1023
+. 
+Nối 
+nút nhấn giữa D12 và GND
+. Code sử dụng 
+INPUT_PULLUP
+ nên không cần điện trở kéo lên bên ngoài; khi nhấn nút, tín hiệu chuyển từ 
+HIGH → LOW
+. 
+Tất cả LED, biến trở và nút nhấn sử dụng chung 
+GND của Arduino
+.
+Câu hỏi 
+3
+: 
+Ghi nh
+ớ
+ dãy s
+ố
+ đúng:
+Minh chứng:
+ 
+ 
+Hình 1. Khai báo
+ và hàm 
+setup(
+)
+ 
+ 
+ 
+ 
+Hình 2. Hàm 
+loop(
+)
+Hình 4. Sơ đồ nối dây
+Giải thích:
+Giải thích hoạt động của chương trình
+Khai báo thư viện và thiết bị:
+ 
+Wire.h
+ và 
+LiquidCrystal_I2C.h
+ dùng để điều khiển LCD 16×2 thông qua giao tiếp I2C. 
+LCD sử dụng địa chỉ 
+0x27
+, kích thước 
+16×2
+. 
+Biến trở nối 
+A0
+ để chọn số, nút nhấn nối 
+D2
+ để xác nhận. 
+enum GameState
+:
+ tạo 4 trạng thái cho trò chơi: 
+STATE_INIT
+: khởi tạo vòng chơi và tạo dãy số. 
+STATE_SHOW_SEQUENCE
+: hiển thị dãy số để người chơi ghi nhớ. 
+STATE_WAIT_INPUT
+: chờ người chơi chọn và nhập số. 
+STATE_GAME_OVER
+: kết thúc khi nhập sai hoặc hết thời gian. 
+generateSequence(
+)
+: tạo dãy số ngẫu nhiên từ 
+0–9
+ và lưu vào mảng 
+sequence[]
+. 
+setup(
+)
+: 
+Khởi tạo Serial Monitor, nút nhấn và LCD. 
+Sử dụng 
+randomSeed(
+)
+ để tạo dãy số ngẫu nhiên khác nhau. 
+Hiển thị màn hình giới thiệu trước khi bắt đầu trò chơi. 
+loop(
+)
+: 
+Đọc nút nhấn và xử lý 
+chống dội 50 ms
+. 
+Sử dụng 
+switch-case
+ để thực hiện các thao tác tương ứng với từng trạng thái của trò chơi. 
+STATE_INIT
+:
+ 
+Đặt lại vị trí nhập. 
+Gọi 
+generateSequence(
+)
+ để tạo dãy số mới. 
+Hiển thị số vòng và độ dài dãy số. 
+Sau đó chuyển sang 
+STATE_SHOW_SEQUENCE
+. 
+STATE_SHOW_SEQUENCE
+:
+ 
+Hiển thị từng số trong dãy trên LCD. 
+Mỗi số xuất hiện 
+800 ms
+ rồi tắt 
+200 ms
+. 
+Sau khi hiển thị hết dãy, bắt đầu tính thời gian nhập và chuyển sang 
+STATE_WAIT_INPUT
+. 
+STATE_WAIT_INPUT
+:
+ 
+Đọc giá trị biến trở bằng 
+analogRead(
+)
+. 
+Dùng 
+map(
+)
+ để chuyển giá trị 
+0–1023
+ thành số 
+0–9
+. 
+Người chơi nhấn nút để xác nhận số đã chọn. 
+Nếu số chọn 
+đúng
+ với 
+sequence[inputIndex]
+, chuyển sang vị trí tiếp theo. 
+Nếu nhập đúng toàn bộ dãy, tăng 
+sequenceLength
+ lên 1 và chuyển sang vòng tiếp theo. 
+Nếu nhập sai hoặc quá 
+5 giây
+, chuyển sang 
+STATE_GAME_OVER
+. 
+STATE_GAME_OVER
+:
+ 
+LCD hiển thị thông báo kết thúc và số lượng chữ số dài nhất người chơi đạt được. 
+Khi nhấn nút, trò chơi được đặt lại về vòng 1 với dãy dài 2 số. 
+Các hàm và lệnh quan trọng:
+ 
+analogRead(
+)
+: đọc giá trị từ biến trở. 
+map(
+)
+: chuyển đổi giá trị biến trở từ 
+0–1023
+ thành 
+0–9
+. 
+constrain(
+)
+: giới hạn số được chọn trong khoảng 
+0–9
+. 
+digitalRead(
+)
+: đọc trạng thái nút nhấn. 
+millis(
+)
+: tính thời gian mà không cần dừng chương trình bằng 
+delay()
+. 
+random(
+)
+: tạo số ngẫu nhiên. 
+lcd.setCursor
+()
+ và 
+lcd.print()
+: điều khiển vị trí và nội dung hiển thị trên LCD. 
+delay(
+)
+: tạo khoảng thời gian chờ khi hiển thị hướng dẫn, dãy số và thông báo.
+Đấu dây:
+LCD I2C 16×2:
+ nối 
+VCC → 5V
+, 
+GND → GND
+, 
+SDA → A4
+, 
+SCL → A5
+ để Arduino giao tiếp với LCD bằng chuẩn 
+I2C
+, chỉ cần 2 chân tín hiệu. 
+Biến trở:
+ chân giữa nối 
+A0
+, hai chân ngoài nối 
+5V
+ và 
+GND
+ để tạo điện áp thay đổi dùng chọn số 
+0–9
+. 
+Nút nhấn:
+ nối giữa 
+D2
+ và 
+GND
+. Code sử dụng 
+INPUT_PULLUP
+ nên không cần điện trở ngoài; khi nhấn nút, 
+D2
+ nhận mức 
+LOW
+. 
+Tất cả các linh kiện nối chung 
+GND của Arduino
+ để có cùng mức tham chiếu điện áp.

@@ -25,7 +25,7 @@
 #include <LiquidCrystal_I2C.h>
 
 // Khoi tao LCD I2C dia chi 0x27, 16 cot, 2 hang
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
 // Cau hinh loai LED 7 doan:
 // false: Common Cathode (Cuc am chung - muc HIGH la sang)
@@ -113,7 +113,6 @@ void updateLCDInputScreen() {
   lcd.print("KHOA SO DIEN TU");
 
   lcd.setCursor(0, 1);
-  lcd.print("Ma: ");
   for (int i = 0; i < PASSWORD_LENGTH; i++) {
     if (i < digitCount) {
       lcd.print("[*] ");
