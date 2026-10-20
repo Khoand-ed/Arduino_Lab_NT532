@@ -5,6 +5,7 @@
 > **Lớp:** NT532.R12 – **Nhóm 10** (topic MQTT dùng tiền tố `cq/NT532.R12/nhom10`)
 >
 > **Vi điều khiển:** toàn bộ code dùng **ESP32 DevKit** (ESP32-WROOM-32) thay cho Wemos D1 (ESP8266) trong tài liệu gốc.
+> Bản **Wemos D1 (ESP8266)** đúng theo tài liệu vẫn được giữ trong thư mục [esp8266/](esp8266/README.md).
 
 ---
 
@@ -67,6 +68,10 @@ LAB3/
 │
 ├── Bai5/
 │   └── Bai5.ino                                 # Bài 5: ESP32 gửi DHT11, hiển thị mức cảnh báo
+│
+├── esp8266/                                     # Bản Wemos D1 (ESP8266) theo tài liệu gốc
+│   ├── README.md                                # Hướng dẫn nối dây cho Wemos D1
+│   └── C1_HttpServerLed/, Bai1/, Bai2/, Bai4/, Bai5/
 │
 ├── raspberry/
 │   └── lab3.conf                                # Cấu hình Mosquitto (MQTT Broker) cho Raspberry Pi
