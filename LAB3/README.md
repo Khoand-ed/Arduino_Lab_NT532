@@ -2,8 +2,7 @@
 **Môn học:** Công nghệ Internet of Things Hiện đại (NT532) - UIT  
 **Giảng viên hướng dẫn:** Phan Trung Phát (phatpt@uit.edu.vn)  
 
-> **Trạng thái:** đã hoàn thành **Phần C.1** (code mẫu HTTP Server) và **Bài 1** (Ghi nhớ dãy số đúng).
-> Phần C.2 (Raspberry Pi) và Bài 2 – Bài 5 chưa thực hiện.
+> **Lớp:** NT532.R12 – **Nhóm 10** (topic MQTT dùng tiền tố `cq/NT532.R12/nhom10`)
 
 ---
 
@@ -21,6 +20,7 @@
    - [Giải thích mã nguồn](#5-giải-thích-mã-nguồn-bài-1)
    - [Chạy thử & Gợi ý ảnh chụp cho báo cáo](#6-chạy-thử--gợi-ý-ảnh-chụp-cho-báo-cáo)
    - [Lỗi thường gặp](#7-lỗi-thường-gặp)
+7. [BÀI 2: Cấu hình từ xa đèn đường thông minh](#bài-2-cấu-hình-từ-xa-đèn-đường-thông-minh)
 
 ---
 
@@ -31,7 +31,7 @@
 | C.1 | HTTP | Wemos D1 làm HTTP Server, bật/tắt LED tích hợp qua web | ✅ |
 | C.2 | — | Cài Raspberry Pi OS, SSH, VNC | ⏳ |
 | Bài 1 | HTTP (Wemos là server) | Trò chơi ghi nhớ dãy số: LED 7 đoạn + LCD + web | ✅ |
-| Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ⏳ |
+| Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
 | Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ⏳ |
 | Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ⏳ |
 | Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ⏳ |
@@ -49,8 +49,16 @@ LAB3/
 ├── C1_HttpServerLed/
 │   └── C1_HttpServerLed.ino                     # Phần C.1: bật/tắt LED qua HTTP Server
 │
-└── Bai1/
-    └── Bai1.ino                                 # Bài 1: Ghi nhớ dãy số đúng
+├── Bai1/
+│   └── Bai1.ino                                 # Bài 1: Ghi nhớ dãy số đúng
+│
+├── Bai2/
+│   └── Bai2.ino                                 # Bài 2: Wemos (HTTP client) điều khiển đèn đường
+│
+└── pc/                                          # Chương trình chạy trên máy tính (Python)
+    ├── requirements.txt                         # Thư viện Python cần cài
+    ├── bai2_server.py                           # Bài 2: RESTful API lưu cấu hình
+    └── Lab03_Bai2.postman_collection.json       # Bài 2: các request mẫu cho Postman
 ```
 
 ---
@@ -303,3 +311,199 @@ Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
 | Một đoạn LED không sáng hoặc sáng sai số | Nhãn chân trên board dạng UNO khác D1 mini, tra lại **bảng quy đổi GPIO** |
 | Trình duyệt không mở được trang | Máy tính và Wemos phải cùng mạng WiFi 2.4 GHz; gõ đúng `http://` + IP trên LCD |
 | Nút số luôn bị mờ | Chỉ bấm được khi trạng thái là "Đến lượt bạn!", tức sau khi LED đã hiện hết dãy |
+
+---
+
+## BÀI 2: CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH
+
+### 1. Yêu cầu Bài 2
+Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến khoảng cách và 03 đèn LED:
+- **Máy tính là Server**, xây dựng RESTful API (chủ yếu dùng **GET** và **PUT**). Server lưu một bộ cấu hình gồm:
+  ngưỡng cảnh báo, ngưỡng báo động, chu kỳ gửi dữ liệu và số phiên bản cấu hình.
+- Người dùng đổi cấu hình bằng `PUT /api/config` qua **Postman**, mỗi lần đổi thì **số phiên bản tăng thêm 1**.
+- **Wemos D1 là HTTP Client**: theo chu kỳ đã cấu hình, gửi `GET` lấy cấu hình về và áp dụng cho thiết bị.
+- Có người tiếp cận (theo cảm biến khoảng cách) thì bật số đèn đủ để chiếu sáng; không có người thì tắt hết đèn.
+- Số đèn sáng tính theo ngưỡng: **cường độ ánh sáng càng gần ngưỡng thì càng nhiều đèn sáng**.
+- Ánh sáng **vượt ngưỡng** thì **liên tục chớp tắt tất cả đèn** để báo người dùng cần cập nhật ngưỡng mới.
+- Máy tính nhận được thông điệp thì in ra command line. Nội dung gửi đi và trả về đều là **JSON** theo định dạng:
+  ```json
+  { "error": true, "message": "this is a message of API", "data": { "temperature": value, "light": value } }
+  ```
+
+> **Cách hiểu đề:** đề ghi "ngưỡng **nhiệt độ** cảnh báo / báo động" nhưng kịch bản không có cảm biến nhiệt độ, còn đèn lại
+> điều khiển theo ngưỡng **ánh sáng**. Nhóm hiểu hai ngưỡng này là **ngưỡng ánh sáng** (đơn vị %). Trường `temperature`
+> vẫn giữ trong JSON cho đúng định dạng, nhưng luôn có giá trị `null`.
+
+---
+
+### 2. Danh sách linh kiện & Sơ đồ nối dây Bài 2
+
+#### Danh sách linh kiện:
+| Linh kiện | Số lượng | Ghi chú |
+| :--- | :---: | :--- |
+| Wemos D1 (ESP8266) | 1 | HTTP Client |
+| Module cảm biến ánh sáng quang trở (4 chân, có AO) | 1 | Đọc analog qua A0 |
+| Cảm biến siêu âm HC-SR04 | 1 | Phát hiện người tiếp cận |
+| Đèn LED 5mm + điện trở $220\,\Omega$ | 3 | 3 đèn đường |
+| Điện trở $1\,k\Omega$ + $2\,k\Omega$ | 1 + 1 | Chia áp chân ECHO từ 5V xuống ~3,3V |
+| Máy tính cài Python 3 + Postman | 1 | Server cấu hình |
+
+#### Bảng kết nối chân:
+| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
+| :--- | :--- | :---: | :---: | :---: |
+| **Module quang trở** | VCC | 3V3 | 3V3 | 3V3 |
+| | GND | GND | GND | GND |
+| | AO | A0 | A0 | A0 |
+| **HC-SR04** | VCC | 5V | 5V | 5V |
+| | GND | GND | GND | GND |
+| | TRIG | GPIO14 | D5 | D5 |
+| | ECHO (qua cầu chia áp) | GPIO12 | D6 | D6 |
+| **LED 1** | Anode (qua trở $220\,\Omega$) | GPIO5 | D3 | D1 |
+| **LED 2** | Anode (qua trở $220\,\Omega$) | GPIO4 | D4 | D2 |
+| **LED 3** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
+| Cathode 3 LED | | GND | GND | GND |
+
+**Cầu chia áp cho ECHO:** `ECHO ── 1kΩ ──┬── GPIO12`, rồi từ điểm nối `┴── 2kΩ ── GND`.
+HC-SR04 xuất xung 5V, chân ESP8266 chỉ chịu 3,3V. Cầu chia cho ra $5 \times \frac{2}{1+2} \approx 3{,}3\text{ V}$.
+
+> Module quang trở cấp **3V3** để điện áp AO không vượt quá dải đo của A0. Với module phổ biến, **càng tối thì AO
+> càng cao**. Code đổi sang "% ánh sáng" (100% = rất sáng). Nếu che cảm biến mà % lại tăng, đổi
+> `LDR_HIGHER_IS_DARKER = false` trong `Bai2.ino`.
+
+---
+
+### 3. Thiết kế RESTful API (server trên máy tính)
+
+Mã nguồn: [pc/bai2_server.py](pc/bai2_server.py) (Flask). Mọi phản hồi đều có dạng `{"error", "message", "data"}`.
+
+| Phương thức & đường dẫn | Ai gọi | Mô tả |
+| :--- | :--- | :--- |
+| `GET /api/config` | Wemos (mỗi chu kỳ), Postman | Trả về bộ cấu hình hiện tại |
+| `PUT /api/config` | Postman | Đổi cấu hình (có thể gửi 1 hoặc nhiều trường), **version tự tăng 1** |
+| `PUT /api/sensor` | Wemos (mỗi chu kỳ) | Gửi dữ liệu cảm biến, server **in ra command line** |
+| `GET /api/sensor` | Postman / trình duyệt | Xem bản tin cảm biến gần nhất |
+
+#### Bộ cấu hình:
+| Trường | Mặc định | Ý nghĩa |
+| :--- | :---: | :--- |
+| `warning_threshold` | 60 | **Ngưỡng cảnh báo** (% ánh sáng): dưới ngưỡng này trời bắt đầu tối, cần bật đèn khi có người |
+| `alarm_threshold` | 20 | **Ngưỡng báo động** (% ánh sáng): dưới ngưỡng này là vượt ngưỡng, chớp tất cả đèn |
+| `send_interval` | 5 | Chu kỳ (giây) Wemos lấy cấu hình và gửi dữ liệu |
+| `version` | 1 | Số phiên bản, **chỉ server được tăng**, người dùng không sửa được |
+
+Server kiểm tra $0 \le \text{alarm} < \text{warning} \le 100$ và $1 \le \text{send\_interval} \le 3600$.
+Sai điều kiện hoặc có trường lạ thì trả về `"error": true` kèm mã **400**. Cấu hình được lưu vào
+`pc/data/bai2_config.json`, nên tắt và bật lại server không mất phiên bản.
+
+**Ví dụ đổi cấu hình bằng Postman:** `PUT http://<IP máy tính>:5000/api/config`, Body → raw → JSON:
+```json
+{ "warning_threshold": 70, "send_interval": 3 }
+```
+Phản hồi:
+```json
+{ "error": false, "message": "Cập nhật cấu hình thành công, phiên bản v2",
+  "data": { "warning_threshold": 70, "alarm_threshold": 20, "send_interval": 3, "version": 2 } }
+```
+
+**Bản tin Wemos gửi lên (`PUT /api/sensor`):**
+```json
+{ "error": false, "message": "Wemos D1 sensor report",
+  "data": { "temperature": null, "light": 45, "distance": 30.2, "person": true,
+            "lamps": 2, "mode": "LIGHTING", "config_version": 2 } }
+```
+
+**Command line của server:**
+```
+[08:06:24] GET  /api/config  từ 172.31.9.50 -> trả về phiên bản v2
+[08:06:24] PUT  /api/sensor  từ 172.31.9.50 | ánh sáng 45% | khoảng cách 30.2 cm | CÓ người | đèn sáng: 2 | chế độ LIGHTING | cấu hình Wemos v2
+```
+
+---
+
+### 4. Thuật toán điều khiển đèn (trên Wemos)
+
+Gọi $L$ là % ánh sáng, $W$ là ngưỡng cảnh báo, $A$ là ngưỡng báo động ($A < W$).
+
+| Điều kiện | Chế độ (`mode`) | Đèn |
+| :--- | :--- | :--- |
+| $L < A$ (vượt ngưỡng báo động) | `OVER_THRESHOLD` | **Chớp tắt cả 3 đèn** (chu kỳ 0,3 s), có người hay không đều chớp |
+| Có người và $L \ge W$ (trời đủ sáng) | `LIGHTING` | 0 đèn |
+| Có người và $A \le L < W$ | `LIGHTING` | $n = \left\lceil 3 \times \dfrac{W - L}{W - A} \right\rceil$ (1 → 3 đèn) |
+| Không có người | `NO_PERSON` | Tắt hết |
+
+Chia đoạn $[A, W)$ thành 3 phần bằng nhau: $L$ càng gần $A$ thì càng nhiều đèn.
+Ví dụ với $W = 60\%$, $A = 20\%$:
+
+| $L$ | 65% | 55% | 40% | 25% | 15% |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Số đèn (có người) | 0 | 1 | 2 | 3 | chớp cả 3 |
+
+**Phát hiện người:** HC-SR04 đo được $d < 50\text{ cm}$ (hằng `PERSON_DISTANCE_CM`). Trạng thái "có người" được
+**giữ thêm 2 giây** sau lần cuối thấy người, để đèn không chập chờn do cảm biến đo nhiễu.
+
+**Luồng chạy của Wemos (non-blocking):**
+- Mỗi **100 ms**: đọc ánh sáng (trung bình 4 mẫu) và khoảng cách, rồi tính chế độ đèn.
+- Mỗi **`send_interval` giây**:
+  1. `GET /api/config`. Nếu `version` khác bản đang dùng thì áp dụng ngay (ngưỡng và chu kỳ mới).
+  2. `PUT /api/sensor` gửi dữ liệu kèm `config_version` đang dùng.
+- Ngay khi khởi động, Wemos đồng bộ một lần, không chờ hết chu kỳ đầu.
+
+---
+
+### 5. Giải thích mã nguồn Bài 2
+- **[Bai2/Bai2.ino](Bai2/Bai2.ino)** dùng `ESP8266HTTPClient` để gửi request và **ArduinoJson 7** để đọc và tạo JSON.
+  - `fetchConfig()`: gửi `GET`, đọc `data.version`. Chỉ khi phiên bản đổi mới cập nhật `warningThreshold`,
+    `alarmThreshold`, `sendIntervalMs` và in ra Serial.
+  - `sendSensorData()`: đóng gói JSON đúng định dạng `{error, message, data}` rồi gửi `PUT`, kèm header
+    `Content-Type: application/json`.
+  - `lampsForLight()`: tính số đèn theo công thức ở mục 4. `updateBlink()` lo việc chớp đèn bằng `millis()`.
+  - Timeout HTTP là 2 giây, nên server tắt thì Wemos chỉ khựng tối đa 2 s rồi chạy tiếp với cấu hình cũ.
+- **[pc/bai2_server.py](pc/bai2_server.py)**: Flask chạy `host=0.0.0.0` để máy khác trong mạng gọi được. Biến `lock`
+  đảm bảo hai request đổi cấu hình cùng lúc không làm tăng sai số phiên bản. Server còn báo khi Wemos đang dùng phiên
+  bản cũ hơn server (Wemos sẽ cập nhật ở chu kỳ sau).
+
+---
+
+### 6. Chạy thử & Gợi ý ảnh chụp cho báo cáo
+
+1. **Cài thư viện:**
+   - **Arduino IDE:** **Library Manager** → cài **ArduinoJson** (Benoit Blanchon), phiên bản **7.x**.
+   - **Python:** trong thư mục `LAB3/pc` chạy:
+     ```bash
+     pip install -r requirements.txt
+     ```
+2. **Chạy server trên máy tính** (cùng mạng WiFi với Wemos):
+   ```bash
+   python bai2_server.py
+   ```
+   Server in ra địa chỉ, ví dụ `Server chạy tại http://172.31.9.36:5000`.
+   Lần đầu chạy, Windows hỏi quyền tường lửa: chọn **Allow access**. Nếu Wemos vẫn không gọi được, xem mục 7.
+3. Sửa `SERVER_URL` trong `Bai2.ino` thành địa chỉ trên, rồi nạp code. Mở Serial Monitor ở **115200 baud**.
+4. **Postman:** **Import** file [pc/Lab03_Bai2.postman_collection.json](pc/Lab03_Bai2.postman_collection.json), sửa
+   biến `base_url`, rồi gửi lần lượt các request `PUT`. Quan sát:
+   - phản hồi Postman có `version` tăng 1;
+   - sau tối đa một chu kỳ, Serial Monitor in `[CONFIG] Ap dung cau hinh v...`;
+   - command line của server in `cấu hình Wemos v...` khớp phiên bản mới.
+5. **Thử phần cứng:**
+   - Đưa tay lại gần HC-SR04 (< 50 cm) rồi che dần cảm biến ánh sáng: số đèn tăng 1 → 3.
+   - Che kín cảm biến ánh sáng: cả 3 đèn chớp liên tục.
+   - Dùng Postman hạ `alarm_threshold` xuống thấp hơn % ánh sáng hiện tại: đèn hết chớp, chứng minh cấu hình từ xa
+     có tác dụng.
+
+**Ảnh nên chụp cho báo cáo:**
+- Postman: `GET /api/config`, `PUT /api/config` thành công (version tăng) và `PUT` sai (`"error": true`, mã 400).
+- Command line của server khi nhận `GET` và `PUT` từ Wemos.
+- Serial Monitor của Wemos lúc áp dụng cấu hình mới.
+- Mạch thực tế ở các trường hợp: không có người, có người với 1 / 2 / 3 đèn, và chớp đèn khi vượt ngưỡng.
+
+---
+
+### 7. Lỗi thường gặp
+
+| Hiện tượng | Nguyên nhân / Cách xử lý |
+| :--- | :--- |
+| Serial báo `GET /api/config loi: connection refused` hoặc `read Timeout` | Sai `SERVER_URL`; máy tính và Wemos khác mạng; hoặc **Windows Firewall** chặn cổng 5000. Mở *Windows Defender Firewall → Allow an app* và tick cả **Private** lẫn **Public** cho `python.exe`. Mạng WiFi của lab thường được Windows xếp vào loại **Public** |
+| Postman báo `"error": true` khi `PUT` | Đọc `message`: ngưỡng báo động phải nhỏ hơn ngưỡng cảnh báo, giá trị phải là số, không gửi trường lạ |
+| Khoảng cách luôn `null` | Kiểm tra cầu chia áp ECHO, cấp **5V** cho HC-SR04, đúng chân TRIG/ECHO |
+| % ánh sáng tăng khi che cảm biến | Đổi `LDR_HIGHER_IS_DARKER = false` |
+| Đèn chập chờn khi đứng yên | Tăng `PERSON_HOLD_MS` hoặc giảm `PERSON_DISTANCE_CM` |

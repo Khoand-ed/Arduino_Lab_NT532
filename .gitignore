@@ -19,3 +19,6 @@ build/
 # Python cache
 __pycache__/
 *.pyc
+
+# Runtime state of Lab 3 PC scripts
+LAB3/pc/data/

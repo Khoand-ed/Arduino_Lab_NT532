@@ -1,0 +1,62 @@
+{
+  "info": {
+    "name": "Lab03 - Bai 2 - Cau hinh den duong",
+    "description": "Doi base_url thanh dia chi may tinh chay bai2_server.py (Collection -> Variables).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:5000" }
+  ],
+  "item": [
+    {
+      "name": "GET cau hinh",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/config"
+      }
+    },
+    {
+      "name": "PUT doi ca bo cau hinh",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"warning_threshold\": 60,\n  \"alarm_threshold\": 20,\n  \"send_interval\": 5\n}"
+        },
+        "url": "{{base_url}}/api/config"
+      }
+    },
+    {
+      "name": "PUT doi 1 truong (chu ky 2 giay)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"send_interval\": 2\n}"
+        },
+        "url": "{{base_url}}/api/config"
+      }
+    },
+    {
+      "name": "PUT cau hinh sai (bao loi)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"warning_threshold\": 10,\n  \"alarm_threshold\": 50\n}"
+        },
+        "url": "{{base_url}}/api/config"
+      }
+    },
+    {
+      "name": "GET du lieu cam bien gan nhat",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/sensor"
+      }
+    }
+  ]
+}
