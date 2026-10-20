@@ -1,10 +1,10 @@
 /**
  * ============================================================================
- * LAB 3 - BÀI 1: GHI NHỚ DÃY SỐ ĐÚNG (HTTP SERVER TRÊN WEMOS D1)
+ * LAB 3 - BÀI 1: GHI NHỚ DÃY SỐ ĐÚNG (HTTP SERVER TRÊN ESP32)
  * Môn học: Công nghệ Internet of Things Hiện đại - UIT
  *
  * KỊCH BẢN:
- * - Wemos D1 dựng HTTP Server, trang "/" có 10 nút số từ 0 đến 9.
+ * - ESP32 dựng HTTP Server, trang "/" có 10 nút số từ 0 đến 9.
  * - Mỗi vòng, LED 7 đoạn lần lượt hiện một dãy số ngẫu nhiên: mỗi số sáng
  *   0.8 giây, giữa hai số tắt 0.25 giây.
  * - Người chơi bấm lại từng số trên web, mỗi lần bấm gửi URL parameters:
@@ -21,33 +21,31 @@
  *   GET /api/state                Trạng thái hiện tại (JSON, web hỏi định kỳ)
  *   GET /api/number?id=1&value=7  Gửi chữ số người chơi chọn
  *
- * PHẦN CỨNG: 1 Wemos D1, 1 LED 7 đoạn 1 số cathode chung + 7 điện trở 220 Ohm,
+ * PHẦN CỨNG: 1 ESP32 DevKit, 1 LED 7 đoạn 1 số cathode chung + 7 điện trở 220 Ohm,
  *            1 LCD 16x2 có module I2C.
  *
- * SƠ ĐỒ NỐI DÂY (ghi theo số GPIO, nhãn in trên board xem bảng trong README):
- *   LED 7 đoạn: a->GPIO5, b->GPIO4, c->GPIO14, d->GPIO12, e->GPIO13,
- *               f->GPIO15, g->GPIO16 (mỗi đoạn qua 1 trở 220 Ohm), COM->GND
- *   LCD I2C   : SDA->GPIO2, SCL->GPIO0, VCC->5V, GND->GND
+ * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D13/G13/IO13):
+ *   LED 7 đoạn: a->GPIO13, b->GPIO14, c->GPIO25, d->GPIO26, e->GPIO27,
+ *               f->GPIO32, g->GPIO33 (mỗi đoạn qua 1 trở 220 Ohm), COM->GND
+ *   LCD I2C   : SDA->GPIO21, SCL->GPIO22, VCC->5V, GND->GND
  * ============================================================================
  */
 
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <WiFi.h>
+#include <WebServer.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
 const char *WIFI_SSID = "UiTiOt-E3.1";
 const char *WIFI_PASS = "UiTiOtAP";
 
-// GPIO0 và GPIO2 bắt buộc ở mức HIGH khi khởi động. Đường I2C luôn được trở
-// kéo lên HIGH nên dùng 2 chân này cho LCD là an toàn, nhường GPIO4/GPIO5
-// cho LED 7 đoạn (Wemos không đủ chân an toàn cho 7 đoạn + I2C mặc định).
-const int LCD_SDA_PIN = 2;
-const int LCD_SCL_PIN = 0;
+// Chân I2C mặc định của ESP32
+const int LCD_SDA_PIN = 21;
+const int LCD_SCL_PIN = 22;
 
-// Thứ tự a, b, c, d, e, f, g. GPIO15 bắt buộc ở mức LOW khi khởi động:
-// LED cathode chung nối về GND nên không kéo chân này lên.
-const int SEG_PINS[7] = {5, 4, 14, 12, 13, 15, 16};
+// Thứ tự a, b, c, d, e, f, g. Tránh các chân quyết định chế độ khởi động
+// của ESP32 (0, 2, 5, 12, 15) để cắm mạch vào vẫn khởi động bình thường.
+const int SEG_PINS[7] = {13, 14, 25, 26, 27, 32, 33};
 const bool IS_COMMON_ANODE = false;
 
 const byte DIGIT_PATTERNS[10] = {
@@ -76,7 +74,7 @@ enum GameState { STATE_IDLE, STATE_SHOWING, STATE_INPUT, STATE_ROUND_DONE, STATE
 enum ShowPhase { PHASE_PREPARE, PHASE_DIGIT_ON, PHASE_GAP };
 enum EndReason { END_NONE, END_WRONG, END_TIMEOUT, END_MAX_LENGTH };
 
-ESP8266WebServer server(80);
+WebServer server(80);
 LiquidCrystal_I2C *lcd = nullptr;
 
 GameState gameState = STATE_IDLE;
@@ -131,7 +129,7 @@ a{color:#1565c0}
 <div class="card">
 <h1>Ghi nhớ dãy số đúng</h1>
 <div id="info"><div>Vòng<b id="round">-</b></div><div>Độ dài dãy<b id="len">-</b></div><div>Kỷ lục<b id="best">0</b></div></div>
-<div id="status">Đang kết nối tới Wemos...</div>
+<div id="status">Đang kết nối tới ESP32...</div>
 <div id="progress"></div>
 <div id="timer"><div id="bar"></div></div>
 <div class="pad" id="pad"></div>
@@ -185,7 +183,7 @@ function poll() {
   fetch('/api/state')
     .then(function (r) { return r.json(); })
     .then(function (s) { if (my === stamp) { st = s; render(); } })
-    .catch(function () { $('status').textContent = 'Mất kết nối tới Wemos...'; });
+    .catch(function () { $('status').textContent = 'Mất kết nối tới ESP32...'; });
 }
 
 function pick(v) {
@@ -448,7 +446,7 @@ void sendStateJson(int code, const char *result) {
 }
 
 void handleRoot() {
-  server.send_P(200, "text/html", GAME_PAGE);
+  server.send(200, "text/html", GAME_PAGE);
 }
 
 void handleState() {
@@ -592,7 +590,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  randomSeed(ESP.random());
+  // random() của ESP32 lấy số từ bộ sinh ngẫu nhiên phần cứng, không cần randomSeed()
 
   server.on("/", handleRoot);
   server.on("/summary", handleSummary);

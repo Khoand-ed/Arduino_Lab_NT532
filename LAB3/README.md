@@ -3,14 +3,16 @@
 **Giảng viên hướng dẫn:** Phan Trung Phát (phatpt@uit.edu.vn)  
 
 > **Lớp:** NT532.R12 – **Nhóm 10** (topic MQTT dùng tiền tố `cq/NT532.R12/nhom10`)
+>
+> **Vi điều khiển:** toàn bộ code dùng **ESP32 DevKit** (ESP32-WROOM-32) thay cho Wemos D1 (ESP8266) trong tài liệu gốc.
 
 ---
 
 ## MỤC LỤC
 1. [Tổng quan Lab 3](#tổng-quan-lab-3)
 2. [Tổng quan cấu trúc thư mục](#tổng-quan-cấu-trúc-thư-mục)
-3. [Chuẩn bị môi trường cho Wemos D1](#chuẩn-bị-môi-trường-cho-wemos-d1)
-4. [Bảng quy đổi chân Wemos D1 (rất quan trọng)](#bảng-quy-đổi-chân-wemos-d1-rất-quan-trọng)
+3. [Chuẩn bị môi trường cho ESP32](#chuẩn-bị-môi-trường-cho-esp32)
+4. [Lưu ý chọn chân ESP32 (rất quan trọng)](#lưu-ý-chọn-chân-esp32-rất-quan-trọng)
 5. [PHẦN C.1: Bật/tắt LED qua HTTP Server](#phần-c1-bậttắt-led-qua-http-server)
 6. [BÀI 1: Ghi nhớ dãy số đúng](#bài-1-ghi-nhớ-dãy-số-đúng)
    - [Yêu cầu bài toán](#1-yêu-cầu-bài-1)
@@ -33,12 +35,12 @@
 
 | Phần | Giao thức | Nội dung | Trạng thái |
 | :--- | :--- | :--- | :---: |
-| C.1 | HTTP | Wemos D1 làm HTTP Server, bật/tắt LED tích hợp qua web | ✅ |
+| C.1 | HTTP | ESP32 làm HTTP Server, bật/tắt LED tích hợp qua web | ✅ |
 | C.2 | — | Cài Raspberry Pi OS, SSH, VNC | ✅ |
-| Bài 1 | HTTP (Wemos là server) | Trò chơi ghi nhớ dãy số: LED 7 đoạn + LCD + web | ✅ |
-| Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
+| Bài 1 | HTTP (ESP32 là server) | Trò chơi ghi nhớ dãy số: LED 7 đoạn + LCD + web | ✅ |
+| Bài 2 | HTTP (ESP32 là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
 | Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ✅ |
-| Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ✅ |
+| Bài 4 | MQTT | Điều khiển LED trên ESP32 từ máy tính qua broker Raspberry Pi | ✅ |
 | Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ✅ |
 
 ---
@@ -58,13 +60,13 @@ LAB3/
 │   └── Bai1.ino                                 # Bài 1: Ghi nhớ dãy số đúng
 │
 ├── Bai2/
-│   └── Bai2.ino                                 # Bài 2: Wemos (HTTP client) điều khiển đèn đường
+│   └── Bai2.ino                                 # Bài 2: ESP32 (HTTP client) điều khiển đèn đường
 │
 ├── Bai4/
-│   └── Bai4.ino                                 # Bài 4: Wemos subscribe topic điều khiển LED
+│   └── Bai4.ino                                 # Bài 4: ESP32 subscribe topic điều khiển LED
 │
 ├── Bai5/
-│   └── Bai5.ino                                 # Bài 5: Wemos gửi DHT11, hiển thị mức cảnh báo
+│   └── Bai5.ino                                 # Bài 5: ESP32 gửi DHT11, hiển thị mức cảnh báo
 │
 ├── raspberry/
 │   └── lab3.conf                                # Cấu hình Mosquitto (MQTT Broker) cho Raspberry Pi
@@ -80,14 +82,17 @@ LAB3/
 
 ---
 
-## CHUẨN BỊ MÔI TRƯỜNG CHO WEMOS D1
+## CHUẨN BỊ MÔI TRƯỜNG CHO ESP32
 
-1. **Thêm board ESP8266 vào Arduino IDE:**
+1. **Thêm board ESP32 vào Arduino IDE:**
    - **File → Preferences**, thêm vào ô *Additional Boards Manager URLs*:
-     `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
-   - **Tools → Board → Boards Manager...**, tìm `esp8266` và nhấn **Install** (đã thử với bản **3.1.2**).
-2. **Chọn board:** **Tools → Board → ESP8266 Boards → LOLIN(WEMOS) D1 R2 & mini**.
-3. **Chọn cổng:** **Tools → Port** → cổng COM của Wemos. Nếu không thấy cổng COM, cài driver **CH340**.
+     `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
+   - **Tools → Board → Boards Manager...**, tìm `esp32` (của **Espressif Systems**) và nhấn **Install**.
+2. **Chọn board:** **Tools → Board → esp32 → ESP32 Dev Module**.
+3. **Chọn cổng:** **Tools → Port** → cổng COM của ESP32. Không thấy cổng COM thì cài driver **CP210x** hoặc **CH340**,
+   tùy chip USB trên board.
+   Nếu nạp code báo `Failed to connect to ESP32... Wrong boot mode`, **giữ nút BOOT** khi IDE hiện `Connecting...`
+   rồi thả ra.
 4. **Thư viện** (Sketch → Include Library → Manage Libraries...):
 
    | Thư viện | Tác giả | Dùng cho |
@@ -98,36 +103,41 @@ LAB3/
    | DHT sensor library + Adafruit Unified Sensor | Adafruit | Bài 5 |
 
    Phía máy tính cần Python 3. Trong thư mục `LAB3/pc` chạy `pip install -r requirements.txt` (Flask, paho-mqtt).
-   Khi biên dịch, IDE sẽ báo *"claims to run on avr architecture"*. Cảnh báo này vô hại, thư viện vẫn chạy tốt trên ESP8266.
-5. **WiFi:** ESP8266 **chỉ hỗ trợ WiFi 2.4 GHz**. Máy tính/điện thoại mở trang web phải **cùng mạng** với Wemos.
+   Khi biên dịch, IDE sẽ báo *"claims to run on avr architecture"*. Cảnh báo này vô hại, thư viện vẫn chạy tốt trên ESP32.
+5. **WiFi:** ESP32 **chỉ hỗ trợ WiFi 2.4 GHz**. Máy tính/điện thoại mở trang web phải **cùng mạng** với ESP32.
    Tên và mật khẩu WiFi khai báo ở đầu mỗi file `.ino` (mặc định theo tài liệu: `UiTiOt-E3.1` / `UiTiOtAP`).
+
+**Khác biệt so với code Wemos D1 (ESP8266) trong tài liệu:**
+
+| ESP8266 (tài liệu) | ESP32 (code Lab 3) |
+| :--- | :--- |
+| `#include <ESP8266WiFi.h>` | `#include <WiFi.h>` |
+| `#include <ESP8266WebServer.h>`, `ESP8266WebServer server(80);` | `#include <WebServer.h>`, `WebServer server(80);` |
+| `#include <ESP8266HTTPClient.h>` | `#include <HTTPClient.h>` |
+| `ESP.getChipId()` | `ESP.getEfuseMac()` |
+| Chân analog `A0`, ADC 10 bit (0–1023) | Chân ADC1 (GPIO32–39), ADC **12 bit (0–4095)** |
+| LED tích hợp GPIO2, sáng khi **LOW** | LED tích hợp GPIO2, sáng khi **HIGH** |
 
 ---
 
-## BẢNG QUY ĐỔI CHÂN WEMOS D1 (RẤT QUAN TRỌNG)
+## LƯU Ý CHỌN CHÂN ESP32 (RẤT QUAN TRỌNG)
 
-Board Wemos D1 trong phòng lab là loại **hình dạng giống Arduino UNO** (Hình 3 trong tài liệu).
-**Nhãn in trên board loại này KHÔNG trùng với hằng số `D0…D8`** khi chọn board *LOLIN(WEMOS) D1 R2 & mini*.
-Ví dụ: trong code hằng `D1` = GPIO5, nhưng chân in chữ **D1** trên board UNO lại là GPIO1 (TX).
+Code ghi chân bằng **số GPIO**. Trên ESP32 DevKit, số này **trùng với số in trên board** (in dạng `D13`, `G13`, `IO13`
+hoặc chỉ `13` tùy hãng). ESP32 nhiều chân nhưng không phải chân nào cũng dùng tùy ý được:
 
-Vì vậy **toàn bộ code của Lab 3 ghi chân bằng số GPIO**. Khi nối dây, tra bảng dưới đây:
+| Chân | Lưu ý | Lab 3 |
+| :--- | :--- | :--- |
+| GPIO0, 2, 5, 12, 15 | Quyết định chế độ khởi động: cắm tải sai thì board không chạy hoặc không nạp được code | **Không dùng** |
+| GPIO6 – 11 | Nối với bộ nhớ flash bên trong | **Không dùng** |
+| GPIO1, 3 | TX/RX của Serial (cổng USB) | Không dùng |
+| GPIO34, 35, 36, 39 | **Chỉ đọc vào** (không xuất tín hiệu được, không có trở kéo lên) | GPIO34 đọc cảm biến ánh sáng |
+| GPIO32 – 39 | ADC1: đọc analog được **cả khi bật WiFi** | Bài 2 |
+| GPIO0, 2, 4, 12 – 15, 25 – 27 | ADC2: **không đọc analog được khi WiFi bật** | Chỉ dùng digital |
+| GPIO21 / GPIO22 | **SDA / SCL** mặc định của I2C | LCD (Bài 1, 5) |
+| GPIO13, 14, 18, 19, 25, 26, 27, 32, 33 | Dùng digital an toàn | LED, cảm biến |
 
-| GPIO (dùng trong code) | Nhãn trên Wemos D1 dạng UNO | Nhãn trên Wemos D1 mini | Lưu ý khi khởi động |
-| :---: | :--- | :---: | :--- |
-| GPIO16 | D2 | D0 | — |
-| GPIO5 | D3 / D15 / SCL | D1 | — |
-| GPIO4 | D4 / D14 / SDA | D2 | — |
-| GPIO0 | D8 | D3 | **Phải ở mức HIGH** (nếu LOW → vào chế độ nạp code) |
-| GPIO2 | D9 | D4 | **Phải ở mức HIGH**, có LED tích hợp (sáng khi LOW) |
-| GPIO14 | D5 / D13 / SCK | D5 | — |
-| GPIO12 | D6 / D12 / MISO | D6 | — |
-| GPIO13 | D7 / D11 / MOSI | D7 | — |
-| GPIO15 | D10 / SS | D8 | **Phải ở mức LOW** |
-| GPIO3 | D0 / RX | RX | Dùng cho Serial |
-| GPIO1 | D1 / TX | TX | Dùng cho Serial |
-| A0 | A0 | A0 | Chân analog duy nhất |
-
-> Trên board dạng UNO, hai chân **SDA/SCL cạnh chân AREF** nối thẳng với GPIO4/GPIO5 (trùng D4/D3).
+> **Mức logic 3,3V:** chân ESP32 **không chịu 5V**. Tín hiệu 5V (ví dụ chân ECHO của HC-SR04) phải qua cầu chia áp.
+> LCD I2C cấp nguồn **5V** (chân `VIN`/`5V` của board) vẫn nối thẳng SDA/SCL được, giống cách làm phổ biến với module PCF8574.
 
 ---
 
@@ -135,12 +145,12 @@ Vì vậy **toàn bộ code của Lab 3 ghi chân bằng số GPIO**. Khi nối 
 
 Mã nguồn: [C1_HttpServerLed/C1_HttpServerLed.ino](C1_HttpServerLed/C1_HttpServerLed.ino) (code mẫu của tài liệu).
 
-1. Nạp code, mở **Serial Monitor** ở **115200 baud** để xem địa chỉ IP Wemos nhận được.
+1. Nạp code, mở **Serial Monitor** ở **115200 baud** để xem địa chỉ IP ESP32 nhận được.
 2. Trên máy tính cùng mạng, mở trình duyệt và gõ IP đó (ví dụ `http://172.31.10.11`).
 3. Bấm **ON** / **OFF** và quan sát LED tích hợp trên board.
-   LED tích hợp nối với GPIO2 theo kiểu **ngược mức**: `LOW` = sáng, `HIGH` = tắt.
+   LED tích hợp của ESP32 DevKit nối với GPIO2: `HIGH` = sáng, `LOW` = tắt (ngược với Wemos D1 trong tài liệu).
 
-**Giải thích:** trình duyệt (HTTP Client) gửi `GET /ledOn` hoặc `GET /ledOff`. Wemos (HTTP Server) dùng
+**Giải thích:** trình duyệt (HTTP Client) gửi `GET /ledOn` hoặc `GET /ledOff`. ESP32 (HTTP Server) dùng
 `server.on(...)` để gọi hàm xử lý tương ứng, đổi trạng thái LED rồi trả về trang HTML mới (HTTP Response 200).
 
 ---
@@ -148,8 +158,8 @@ Mã nguồn: [C1_HttpServerLed/C1_HttpServerLed.ino](C1_HttpServerLed/C1_HttpSer
 ## BÀI 1: GHI NHỚ DÃY SỐ ĐÚNG
 
 ### 1. Yêu cầu Bài 1
-Lấy ý tưởng từ Bài 3 của LAB 1. Kịch bản gồm 01 Wemos D1, 01 LED 7 đoạn, 01 màn hình LCD:
-- HTTP Server dựng trên Wemos D1. Trang giao diện tại đường dẫn gốc `/` chứa **10 số từ 0 đến 9**.
+Lấy ý tưởng từ Bài 3 của LAB 1. Kịch bản gồm 01 ESP32, 01 LED 7 đoạn, 01 màn hình LCD:
+- HTTP Server dựng trên ESP32. Trang giao diện tại đường dẫn gốc `/` chứa **10 số từ 0 đến 9**.
 - Mỗi vòng chơi, LED 7 đoạn lần lượt hiển thị một dãy chữ số ngẫu nhiên. Mỗi chữ số sáng trong **0,8 giây**,
   giữa hai chữ số có một khoảng tắt ngắn.
 - Sau khi dãy số kết thúc, người chơi nhập lại từng chữ số **theo đúng thứ tự** trên website.
@@ -166,40 +176,30 @@ Lấy ý tưởng từ Bài 3 của LAB 1. Kịch bản gồm 01 Wemos D1, 01 LE
 #### Danh sách linh kiện:
 | Linh kiện | Số lượng | Ghi chú |
 | :--- | :---: | :--- |
-| Wemos D1 (ESP8266) | 1 | HTTP Server + điều khiển phần cứng |
+| ESP32 DevKit | 1 | HTTP Server + điều khiển phần cứng |
 | LED 7 đoạn 1 chữ số | 1 | Loại **cathode chung** (giống LAB 1, LAB 2) |
 | Điện trở $220\,\Omega$ | 7 | Hạn dòng cho 7 đoạn a…g |
 | LCD 16x2 kèm module I2C | 1 | Địa chỉ 0x27 hoặc 0x3F (code **tự dò**) |
 | Breadboard & dây cắm | 1 bộ | |
 
-#### Vì sao chọn chân như vậy?
-Wemos chỉ có 9 chân GPIO dùng được. LED 7 đoạn cần 7 chân, LCD I2C cần 2 chân, nên phải dùng hết, kể cả 3 chân
-quyết định chế độ khởi động là GPIO0, GPIO2 và GPIO15. Nếu nối sai, board sẽ **không chạy chương trình sau khi bật nguồn**:
-- **LCD I2C được dời sang GPIO2 (SDA) và GPIO0 (SCL).** Đường I2C luôn có điện trở kéo lên HIGH, đúng mức mà
-  GPIO0/GPIO2 cần khi khởi động. Code gọi `Wire.begin(2, 0)` để đổi chân I2C.
-- **Đoạn f dùng GPIO15.** LED cathode chung nối về GND nên không kéo chân này lên, GPIO15 vẫn ở mức LOW khi khởi động.
-- Nếu nối một đoạn LED (cathode chung) vào GPIO0/GPIO2, LED sẽ kéo chân xuống khoảng 1,7 V, chưa đủ mức HIGH,
-  và board có thể rơi vào chế độ nạp code. Vì vậy hai chân này được dành cho I2C.
-
 #### Bảng kết nối chân:
-| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
-| :--- | :--- | :---: | :---: | :---: |
-| **LED 7 đoạn** | a (qua trở $220\,\Omega$) | GPIO5 | D3 | D1 |
-| | b (qua trở $220\,\Omega$) | GPIO4 | D4 | D2 |
-| | c (qua trở $220\,\Omega$) | GPIO14 | D5 | D5 |
-| | d (qua trở $220\,\Omega$) | GPIO12 | D6 | D6 |
-| | e (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
-| | f (qua trở $220\,\Omega$) | GPIO15 | D10 | D8 |
-| | g (qua trở $220\,\Omega$) | GPIO16 | D2 | D0 |
-| | COM (cathode chung) | GND | GND | GND |
-| **LCD I2C** | SDA | GPIO2 | **D9** | D4 |
-| | SCL | GPIO0 | **D8** | D3 |
-| | VCC | 5V | 5V | 5V |
-| | GND | GND | GND | GND |
+| Linh kiện | Chân linh kiện | GPIO (= số in trên board) |
+| :--- | :--- | :---: |
+| **LED 7 đoạn** | a (qua trở $220\,\Omega$) | GPIO13 |
+| | b (qua trở $220\,\Omega$) | GPIO14 |
+| | c (qua trở $220\,\Omega$) | GPIO25 |
+| | d (qua trở $220\,\Omega$) | GPIO26 |
+| | e (qua trở $220\,\Omega$) | GPIO27 |
+| | f (qua trở $220\,\Omega$) | GPIO32 |
+| | g (qua trở $220\,\Omega$) | GPIO33 |
+| | COM (cathode chung) | GND |
+| **LCD I2C** | SDA | GPIO21 |
+| | SCL | GPIO22 |
+| | VCC | 5V (VIN) |
+| | GND | GND |
 
-> ⚠️ **Không** cắm LCD vào hai chân SDA/SCL cạnh AREF trên board dạng UNO. Hai chân đó là GPIO4/GPIO5,
-> trong bài này đang dùng cho đoạn a và b.
-> LED tích hợp (GPIO2) sẽ nhấp nháy nhẹ mỗi khi cập nhật LCD vì dùng chung chân SDA. Hiện tượng này là bình thường.
+> 7 chân của LED 7 đoạn đều là chân digital an toàn, tránh các chân khởi động (0, 2, 5, 12, 15), nên cắm mạch vào
+> board vẫn khởi động và nạp code bình thường. LCD dùng cặp I2C mặc định GPIO21/GPIO22.
 
 ---
 
@@ -209,7 +209,7 @@ Toàn bộ trò chơi là một máy trạng thái **non-blocking** (dùng `mill
 `server.handleClient()` luôn được gọi và trang web vẫn nhận được phản hồi ngay cả khi LED đang hiện dãy số.
 
 ```
-        [ IDLE ]  (LCD hiện IP của Wemos)
+        [ IDLE ]  (LCD hiện IP của ESP32)
             │  GET /api/start
             ▼
    ┌──► [ SHOWING ]  Chuẩn bị 1.5s → mỗi số sáng 0.8s, tắt 0.25s
@@ -224,8 +224,8 @@ Toàn bộ trò chơi là một máy trạng thái **non-blocking** (dùng `mill
    └────────┘
 ```
 
-1. **Bắt đầu:** `GET /api/start` → vòng 1, độ dài 2. Dãy được sinh bằng `random(0, 10)` với seed lấy từ
-   bộ sinh số ngẫu nhiên phần cứng (`ESP.random()`).
+1. **Bắt đầu:** `GET /api/start` → vòng 1, độ dài 2. Dãy được sinh bằng `random(0, 10)`; trên ESP32 hàm này lấy số
+   từ bộ sinh số ngẫu nhiên phần cứng nên mỗi ván một dãy khác.
 2. **Hiện dãy (`SHOWING`):** 3 pha `PREPARE` → `DIGIT_ON` (0,8 s) → `GAP` (0,25 s), lặp cho tới số cuối.
    Trong lúc này các nút trên web bị khóa.
 3. **Nhập (`INPUT`):** mỗi lần bấm, web gửi `GET /api/number?id=<vị trí>&value=<số>`.
@@ -275,7 +275,7 @@ Toàn bộ trò chơi là một máy trạng thái **non-blocking** (dùng `mill
 | `missing_params` / `invalid_id` / `invalid_value` | Thiếu tham số / sai vị trí / giá trị không phải 0–9 | 400 |
 
 **Vì sao trang web phải hỏi định kỳ `/api/state`?** HTTP hoạt động theo mô hình **request/response**: server chỉ trả lời
-khi client hỏi, không tự đẩy dữ liệu được. Khi hết 5 giây, Wemos không thể chủ động báo cho trình duyệt. Vì vậy
+khi client hỏi, không tự đẩy dữ liệu được. Khi hết 5 giây, ESP32 không thể chủ động báo cho trình duyệt. Vì vậy
 JavaScript trên trang hỏi `/api/state` mỗi 0,4 s (*polling*), thấy `state = GAME_OVER` thì tự chuyển sang `/summary`.
 Đây là điểm khác biệt quan trọng so với MQTT (publish/subscribe) ở các bài sau.
 
@@ -283,10 +283,10 @@ JavaScript trên trang hỏi `/api/state` mỗi 0,4 s (*polling*), thấy `state
 
 ### 5. Giải thích mã nguồn Bài 1
 Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
-- **Khai báo chân:** `SEG_PINS[7] = {5, 4, 14, 12, 13, 15, 16}` (a…g) và `LCD_SDA_PIN = 2`, `LCD_SCL_PIN = 0`.
+- **Khai báo chân:** `SEG_PINS[7] = {13, 14, 25, 26, 27, 32, 33}` (a…g) và `LCD_SDA_PIN = 21`, `LCD_SCL_PIN = 22`.
   Cờ `IS_COMMON_ANODE = false` cho LED cathode chung, mảng `DIGIT_PATTERNS[10]` giữ nguyên cách mã hóa như LAB 2.
 - **Tự dò địa chỉ LCD:** `detectLcdAddress()` thử 0x27 rồi 0x3F, nên không cần sửa code khi đổi màn hình.
-- **Giao diện web:** chuỗi `GAME_PAGE` lưu trong bộ nhớ Flash (`PROGMEM`), gửi bằng `server.send_P(...)`.
+- **Giao diện web:** chuỗi `GAME_PAGE` (HTML + JavaScript) nằm trong bộ nhớ Flash, gửi bằng `server.send(...)`.
   JavaScript trên trang:
   - `poll()` hỏi `/api/state` mỗi 400 ms rồi cập nhật vòng, độ dài, các số đã đúng và thanh đếm ngược.
   - `pick(v)` gửi `/api/number?id=...&value=...`, khóa nút cho tới khi có phản hồi để tránh bấm đúp.
@@ -304,7 +304,7 @@ Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
 
 ### 6. Chạy thử & Gợi ý ảnh chụp cho báo cáo
 
-1. Nối dây theo bảng trên, nạp [Bai1/Bai1.ino](Bai1/Bai1.ino) (board *LOLIN(WEMOS) D1 R2 & mini*).
+1. Nối dây theo bảng trên, nạp [Bai1/Bai1.ino](Bai1/Bai1.ino) (board *ESP32 Dev Module*).
 2. Khi kết nối WiFi xong, **dòng 2 của LCD hiện địa chỉ IP** (Serial Monitor cũng in ra).
 3. Trên máy tính hoặc điện thoại cùng mạng, mở `http://<IP>/` rồi bấm **Bắt đầu**.
 4. Nhìn LED 7 đoạn, ghi nhớ dãy và bấm lại trên web. Thử cả ba cách kết thúc: nhập sai, chờ quá 5 giây, và chơi
@@ -331,11 +331,10 @@ Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
 
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 | :--- | :--- |
-| Board không chạy sau khi cắm mạch (Serial in ký tự rác, không kết nối WiFi) | Sai chân khởi động: kiểm tra LCD đã nối SDA→**GPIO2**, SCL→**GPIO0**; đoạn f vào **GPIO15**; LED 7 đoạn là loại cathode chung |
-| Không nạp được code khi đã cắm mạch | Rút tạm dây SCL (GPIO0) khi nạp rồi cắm lại, nhấn nút RESET |
+| Board khởi động lại liên tục / không nạp được code | Kiểm tra không cắm nhầm dây vào GPIO0, 2, 5, 12, 15; khi nạp giữ nút **BOOT** lúc IDE hiện `Connecting...` |
 | LCD sáng nhưng không có chữ | Vặn biến trở tương phản phía sau module I2C; kiểm tra lại SDA/SCL có bị đảo không |
-| Một đoạn LED không sáng hoặc sáng sai số | Nhãn chân trên board dạng UNO khác D1 mini, tra lại **bảng quy đổi GPIO** |
-| Trình duyệt không mở được trang | Máy tính và Wemos phải cùng mạng WiFi 2.4 GHz; gõ đúng `http://` + IP trên LCD |
+| Một đoạn LED không sáng hoặc sáng sai số | Kiểm tra lại thứ tự a…g theo bảng chân; LED 7 đoạn phải là loại cathode chung |
+| Trình duyệt không mở được trang | Máy tính và ESP32 phải cùng mạng WiFi 2.4 GHz; gõ đúng `http://` + IP trên LCD |
 | Nút số luôn bị mờ | Chỉ bấm được khi trạng thái là "Đến lượt bạn!", tức sau khi LED đã hiện hết dãy |
 
 ---
@@ -343,11 +342,11 @@ Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
 ## BÀI 2: CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH
 
 ### 1. Yêu cầu Bài 2
-Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến khoảng cách và 03 đèn LED:
+Kịch bản gồm 01 ESP32, 01 cảm biến ánh sáng, 01 cảm biến khoảng cách và 03 đèn LED:
 - **Máy tính là Server**, xây dựng RESTful API (chủ yếu dùng **GET** và **PUT**). Server lưu một bộ cấu hình gồm:
   ngưỡng cảnh báo, ngưỡng báo động, chu kỳ gửi dữ liệu và số phiên bản cấu hình.
 - Người dùng đổi cấu hình bằng `PUT /api/config` qua **Postman**, mỗi lần đổi thì **số phiên bản tăng thêm 1**.
-- **Wemos D1 là HTTP Client**: theo chu kỳ đã cấu hình, gửi `GET` lấy cấu hình về và áp dụng cho thiết bị.
+- **ESP32 là HTTP Client**: theo chu kỳ đã cấu hình, gửi `GET` lấy cấu hình về và áp dụng cho thiết bị.
 - Có người tiếp cận (theo cảm biến khoảng cách) thì bật số đèn đủ để chiếu sáng; không có người thì tắt hết đèn.
 - Số đèn sáng tính theo ngưỡng: **cường độ ánh sáng càng gần ngưỡng thì càng nhiều đèn sáng**.
 - Ánh sáng **vượt ngưỡng** thì **liên tục chớp tắt tất cả đèn** để báo người dùng cần cập nhật ngưỡng mới.
@@ -367,32 +366,35 @@ Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến kho�
 #### Danh sách linh kiện:
 | Linh kiện | Số lượng | Ghi chú |
 | :--- | :---: | :--- |
-| Wemos D1 (ESP8266) | 1 | HTTP Client |
-| Module cảm biến ánh sáng quang trở (4 chân, có AO) | 1 | Đọc analog qua A0 |
+| ESP32 DevKit | 1 | HTTP Client |
+| Module cảm biến ánh sáng quang trở (4 chân, có AO) | 1 | Đọc analog qua GPIO34 (ADC1) |
 | Cảm biến siêu âm HC-SR04 | 1 | Phát hiện người tiếp cận |
 | Đèn LED 5mm + điện trở $220\,\Omega$ | 3 | 3 đèn đường |
 | Điện trở $1\,k\Omega$ + $2\,k\Omega$ | 1 + 1 | Chia áp chân ECHO từ 5V xuống ~3,3V |
 | Máy tính cài Python 3 + Postman | 1 | Server cấu hình |
 
 #### Bảng kết nối chân:
-| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
-| :--- | :--- | :---: | :---: | :---: |
-| **Module quang trở** | VCC | 3V3 | 3V3 | 3V3 |
-| | GND | GND | GND | GND |
-| | AO | A0 | A0 | A0 |
-| **HC-SR04** | VCC | 5V | 5V | 5V |
-| | GND | GND | GND | GND |
-| | TRIG | GPIO14 | D5 | D5 |
-| | ECHO (qua cầu chia áp) | GPIO12 | D6 | D6 |
-| **LED 1** | Anode (qua trở $220\,\Omega$) | GPIO5 | D3 | D1 |
-| **LED 2** | Anode (qua trở $220\,\Omega$) | GPIO4 | D4 | D2 |
-| **LED 3** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
-| Cathode 3 LED | | GND | GND | GND |
+| Linh kiện | Chân linh kiện | GPIO (= số in trên board) |
+| :--- | :--- | :---: |
+| **Module quang trở** | VCC | 3V3 |
+| | GND | GND |
+| | AO | **GPIO34** |
+| **HC-SR04** | VCC | 5V (VIN) |
+| | GND | GND |
+| | TRIG | GPIO18 |
+| | ECHO (qua cầu chia áp) | GPIO19 |
+| **LED 1** | Anode (qua trở $220\,\Omega$) | GPIO25 |
+| **LED 2** | Anode (qua trở $220\,\Omega$) | GPIO26 |
+| **LED 3** | Anode (qua trở $220\,\Omega$) | GPIO27 |
+| Cathode 3 LED | | GND |
 
-**Cầu chia áp cho ECHO:** `ECHO ── 1kΩ ──┬── GPIO12`, rồi từ điểm nối `┴── 2kΩ ── GND`.
-HC-SR04 xuất xung 5V, chân ESP8266 chỉ chịu 3,3V. Cầu chia cho ra $5 \times \frac{2}{1+2} \approx 3{,}3\text{ V}$.
+**Cầu chia áp cho ECHO:** `ECHO ── 1kΩ ──┬── GPIO19`, rồi từ điểm nối `┴── 2kΩ ── GND`.
+HC-SR04 xuất xung 5V, chân ESP32 chỉ chịu 3,3V. Cầu chia cho ra $5 \times \frac{2}{1+2} \approx 3{,}3\text{ V}$.
 
-> Module quang trở cấp **3V3** để điện áp AO không vượt quá dải đo của A0. Với module phổ biến, **càng tối thì AO
+> **Vì sao GPIO34?** Đọc analog phải dùng chân **ADC1** (GPIO32–39), vì ADC2 bị WiFi chiếm, `analogRead()` trên ADC2
+> sẽ lỗi khi ESP32 đang kết nối WiFi. ADC của ESP32 là **12 bit**, nên code quy đổi `map(raw, 0, 4095, 0, 100)`.
+>
+> Module quang trở cấp **3V3** để điện áp AO không vượt quá 3,3V. Với module phổ biến, **càng tối thì AO
 > càng cao**. Code đổi sang "% ánh sáng" (100% = rất sáng). Nếu che cảm biến mà % lại tăng, đổi
 > `LDR_HIGHER_IS_DARKER = false` trong `Bai2.ino`.
 
@@ -404,9 +406,9 @@ Mã nguồn: [pc/bai2_server.py](pc/bai2_server.py) (Flask). Mọi phản hồi 
 
 | Phương thức & đường dẫn | Ai gọi | Mô tả |
 | :--- | :--- | :--- |
-| `GET /api/config` | Wemos (mỗi chu kỳ), Postman | Trả về bộ cấu hình hiện tại |
+| `GET /api/config` | ESP32 (mỗi chu kỳ), Postman | Trả về bộ cấu hình hiện tại |
 | `PUT /api/config` | Postman | Đổi cấu hình (có thể gửi 1 hoặc nhiều trường), **version tự tăng 1** |
-| `PUT /api/sensor` | Wemos (mỗi chu kỳ) | Gửi dữ liệu cảm biến, server **in ra command line** |
+| `PUT /api/sensor` | ESP32 (mỗi chu kỳ) | Gửi dữ liệu cảm biến, server **in ra command line** |
 | `GET /api/sensor` | Postman / trình duyệt | Xem bản tin cảm biến gần nhất |
 
 #### Bộ cấu hình:
@@ -414,7 +416,7 @@ Mã nguồn: [pc/bai2_server.py](pc/bai2_server.py) (Flask). Mọi phản hồi 
 | :--- | :---: | :--- |
 | `warning_threshold` | 60 | **Ngưỡng cảnh báo** (% ánh sáng): dưới ngưỡng này trời bắt đầu tối, cần bật đèn khi có người |
 | `alarm_threshold` | 20 | **Ngưỡng báo động** (% ánh sáng): dưới ngưỡng này là vượt ngưỡng, chớp tất cả đèn |
-| `send_interval` | 5 | Chu kỳ (giây) Wemos lấy cấu hình và gửi dữ liệu |
+| `send_interval` | 5 | Chu kỳ (giây) ESP32 lấy cấu hình và gửi dữ liệu |
 | `version` | 1 | Số phiên bản, **chỉ server được tăng**, người dùng không sửa được |
 
 Server kiểm tra $0 \le \text{alarm} < \text{warning} \le 100$ và $1 \le \text{send\_interval} \le 3600$.
@@ -431,9 +433,9 @@ Phản hồi:
   "data": { "warning_threshold": 70, "alarm_threshold": 20, "send_interval": 3, "version": 2 } }
 ```
 
-**Bản tin Wemos gửi lên (`PUT /api/sensor`):**
+**Bản tin ESP32 gửi lên (`PUT /api/sensor`):**
 ```json
-{ "error": false, "message": "Wemos D1 sensor report",
+{ "error": false, "message": "ESP32 sensor report",
   "data": { "temperature": null, "light": 45, "distance": 30.2, "person": true,
             "lamps": 2, "mode": "LIGHTING", "config_version": 2 } }
 ```
@@ -441,12 +443,12 @@ Phản hồi:
 **Command line của server:**
 ```
 [08:06:24] GET  /api/config  từ 172.31.9.50 -> trả về phiên bản v2
-[08:06:24] PUT  /api/sensor  từ 172.31.9.50 | ánh sáng 45% | khoảng cách 30.2 cm | CÓ người | đèn sáng: 2 | chế độ LIGHTING | cấu hình Wemos v2
+[08:06:24] PUT  /api/sensor  từ 172.31.9.50 | ánh sáng 45% | khoảng cách 30.2 cm | CÓ người | đèn sáng: 2 | chế độ LIGHTING | cấu hình ESP32 v2
 ```
 
 ---
 
-### 4. Thuật toán điều khiển đèn (trên Wemos)
+### 4. Thuật toán điều khiển đèn (trên ESP32)
 
 Gọi $L$ là % ánh sáng, $W$ là ngưỡng cảnh báo, $A$ là ngưỡng báo động ($A < W$).
 
@@ -467,26 +469,26 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 **Phát hiện người:** HC-SR04 đo được $d < 50\text{ cm}$ (hằng `PERSON_DISTANCE_CM`). Trạng thái "có người" được
 **giữ thêm 2 giây** sau lần cuối thấy người, để đèn không chập chờn do cảm biến đo nhiễu.
 
-**Luồng chạy của Wemos (non-blocking):**
+**Luồng chạy của ESP32 (non-blocking):**
 - Mỗi **100 ms**: đọc ánh sáng (trung bình 4 mẫu) và khoảng cách, rồi tính chế độ đèn.
 - Mỗi **`send_interval` giây**:
   1. `GET /api/config`. Nếu `version` khác bản đang dùng thì áp dụng ngay (ngưỡng và chu kỳ mới).
   2. `PUT /api/sensor` gửi dữ liệu kèm `config_version` đang dùng.
-- Ngay khi khởi động, Wemos đồng bộ một lần, không chờ hết chu kỳ đầu.
+- Ngay khi khởi động, ESP32 đồng bộ một lần, không chờ hết chu kỳ đầu.
 
 ---
 
 ### 5. Giải thích mã nguồn Bài 2
-- **[Bai2/Bai2.ino](Bai2/Bai2.ino)** dùng `ESP8266HTTPClient` để gửi request và **ArduinoJson 7** để đọc và tạo JSON.
+- **[Bai2/Bai2.ino](Bai2/Bai2.ino)** dùng `HTTPClient` của ESP32 để gửi request và **ArduinoJson 7** để đọc và tạo JSON.
   - `fetchConfig()`: gửi `GET`, đọc `data.version`. Chỉ khi phiên bản đổi mới cập nhật `warningThreshold`,
     `alarmThreshold`, `sendIntervalMs` và in ra Serial.
   - `sendSensorData()`: đóng gói JSON đúng định dạng `{error, message, data}` rồi gửi `PUT`, kèm header
     `Content-Type: application/json`.
   - `lampsForLight()`: tính số đèn theo công thức ở mục 4. `updateBlink()` lo việc chớp đèn bằng `millis()`.
-  - Timeout HTTP là 2 giây, nên server tắt thì Wemos chỉ khựng tối đa 2 s rồi chạy tiếp với cấu hình cũ.
+  - Timeout HTTP là 2 giây, nên server tắt thì ESP32 chỉ khựng tối đa 2 s rồi chạy tiếp với cấu hình cũ.
 - **[pc/bai2_server.py](pc/bai2_server.py)**: Flask chạy `host=0.0.0.0` để máy khác trong mạng gọi được. Biến `lock`
-  đảm bảo hai request đổi cấu hình cùng lúc không làm tăng sai số phiên bản. Server còn báo khi Wemos đang dùng phiên
-  bản cũ hơn server (Wemos sẽ cập nhật ở chu kỳ sau).
+  đảm bảo hai request đổi cấu hình cùng lúc không làm tăng sai số phiên bản. Server còn báo khi ESP32 đang dùng phiên
+  bản cũ hơn server (ESP32 sẽ cập nhật ở chu kỳ sau).
 
 ---
 
@@ -498,18 +500,18 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
      ```bash
      pip install -r requirements.txt
      ```
-2. **Chạy server trên máy tính** (cùng mạng WiFi với Wemos):
+2. **Chạy server trên máy tính** (cùng mạng WiFi với ESP32):
    ```bash
    python bai2_server.py
    ```
    Server in ra địa chỉ, ví dụ `Server chạy tại http://172.31.9.36:5000`.
-   Lần đầu chạy, Windows hỏi quyền tường lửa: chọn **Allow access**. Nếu Wemos vẫn không gọi được, xem mục 7.
+   Lần đầu chạy, Windows hỏi quyền tường lửa: chọn **Allow access**. Nếu ESP32 vẫn không gọi được, xem mục 7.
 3. Sửa `SERVER_URL` trong `Bai2.ino` thành địa chỉ trên, rồi nạp code. Mở Serial Monitor ở **115200 baud**.
 4. **Postman:** **Import** file [pc/Lab03_Bai2.postman_collection.json](pc/Lab03_Bai2.postman_collection.json), sửa
    biến `base_url`, rồi gửi lần lượt các request `PUT`. Quan sát:
    - phản hồi Postman có `version` tăng 1;
    - sau tối đa một chu kỳ, Serial Monitor in `[CONFIG] Ap dung cau hinh v...`;
-   - command line của server in `cấu hình Wemos v...` khớp phiên bản mới.
+   - command line của server in `cấu hình ESP32 v...` khớp phiên bản mới.
 5. **Thử phần cứng:**
    - Đưa tay lại gần HC-SR04 (< 50 cm) rồi che dần cảm biến ánh sáng: số đèn tăng 1 → 3.
    - Che kín cảm biến ánh sáng: cả 3 đèn chớp liên tục.
@@ -518,8 +520,8 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 
 **Ảnh nên chụp cho báo cáo:**
 - Postman: `GET /api/config`, `PUT /api/config` thành công (version tăng) và `PUT` sai (`"error": true`, mã 400).
-- Command line của server khi nhận `GET` và `PUT` từ Wemos.
-- Serial Monitor của Wemos lúc áp dụng cấu hình mới.
+- Command line của server khi nhận `GET` và `PUT` từ ESP32.
+- Serial Monitor của ESP32 lúc áp dụng cấu hình mới.
 - Mạch thực tế ở các trường hợp: không có người, có người với 1 / 2 / 3 đèn, và chớp đèn khi vượt ngưỡng.
 
 ---
@@ -528,7 +530,7 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 | :--- | :--- |
-| Serial báo `GET /api/config loi: connection refused` hoặc `read Timeout` | Sai `SERVER_URL`; máy tính và Wemos khác mạng; hoặc **Windows Firewall** chặn cổng 5000. Mở *Windows Defender Firewall → Allow an app* và tick cả **Private** lẫn **Public** cho `python.exe`. Mạng WiFi của lab thường được Windows xếp vào loại **Public** |
+| Serial báo `GET /api/config loi: connection refused` hoặc `read Timeout` | Sai `SERVER_URL`; máy tính và ESP32 khác mạng; hoặc **Windows Firewall** chặn cổng 5000. Mở *Windows Defender Firewall → Allow an app* và tick cả **Private** lẫn **Public** cho `python.exe`. Mạng WiFi của lab thường được Windows xếp vào loại **Public** |
 | Postman báo `"error": true` khi `PUT` | Đọc `message`: ngưỡng báo động phải nhỏ hơn ngưỡng cảnh báo, giá trị phải là số, không gửi trường lạ |
 | Khoảng cách luôn `null` | Kiểm tra cầu chia áp ECHO, cấp **5V** cho HC-SR04, đúng chân TRIG/ECHO |
 | % ánh sáng tăng khi che cảm biến | Đổi `LDR_HIGHER_IS_DARKER = false` |
@@ -576,7 +578,7 @@ Raspberry Pi đóng vai trò **MQTT Broker** cho Bài 3, 4, 5. Nếu lab đã c�
    ```bash
    sudo apt update && sudo apt install -y mosquitto mosquitto-clients
    ```
-2. **Mở cổng cho máy khác kết nối.** Mosquitto 2.x **mặc định chỉ nhận kết nối từ chính Pi**, nên Wemos và laptop sẽ
+2. **Mở cổng cho máy khác kết nối.** Mosquitto 2.x **mặc định chỉ nhận kết nối từ chính Pi**, nên ESP32 và laptop sẽ
    bị từ chối nếu bỏ qua bước này. Tạo file cấu hình giống [raspberry/lab3.conf](raspberry/lab3.conf):
    ```bash
    sudo nano /etc/mosquitto/conf.d/lab3.conf
@@ -678,39 +680,39 @@ màn hình MQTTX của Client 1 ứng với **mỗi** bộ lọc (5 ảnh); màn
 ## BÀI 4: ĐIỀU KHIỂN LED QUA MQTT
 
 ### 1. Yêu cầu Bài 4
-Kịch bản gồm 01 Wemos D1, 01 Raspberry Pi, 01 máy tính cá nhân và 01 đèn LED:
+Kịch bản gồm 01 ESP32, 01 Raspberry Pi, 01 máy tính cá nhân và 01 đèn LED:
 - **Raspberry Pi** đóng vai trò **MQTT Broker**.
-- Triển khai MQTT Client trên **Wemos D1** và **máy tính**.
+- Triển khai MQTT Client trên **ESP32** và **máy tính**.
 - Máy tính **publish** trạng thái đèn vào topic `cq/NT532.R12/nhom10/led`.
-- Wemos **subscribe** topic đó để lắng nghe trạng thái, từ đó bật hoặc tắt LED.
+- ESP32 **subscribe** topic đó để lắng nghe trạng thái, từ đó bật hoặc tắt LED.
 
 ```
- [Máy tính]  ── publish "ON"/"OFF" ──►  [Raspberry Pi: Mosquitto]  ── chuyển tiếp ──►  [Wemos D1] ──► LED
+ [Máy tính]  ── publish "ON"/"OFF" ──►  [Raspberry Pi: Mosquitto]  ── chuyển tiếp ──►  [ESP32] ──► LED
   bai4_led_control.py                    topic cq/NT532.R12/nhom10/led                 subscribe
 ```
 
 ### 2. Linh kiện & Sơ đồ nối dây
-| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
-| :--- | :--- | :---: | :---: | :---: |
-| **LED** | Anode (qua trở $220\,\Omega$) | GPIO14 | D5 | D5 |
-| | Cathode | GND | GND | GND |
+| Linh kiện | Chân linh kiện | GPIO (= số in trên board) |
+| :--- | :--- | :---: |
+| **LED** | Anode (qua trở $220\,\Omega$) | GPIO25 |
+| | Cathode | GND |
 
 ### 3. Thiết kế bản tin
 | Thành phần | Giá trị |
 | :--- | :--- |
 | Topic | `cq/NT532.R12/nhom10/led` |
-| Payload | `ON` hoặc `OFF` (Wemos chấp nhận cả `on`/`off`, `1`/`0`; giá trị khác bị bỏ qua) |
+| Payload | `ON` hoặc `OFF` (ESP32 chấp nhận cả `on`/`off`, `1`/`0`; giá trị khác bị bỏ qua) |
 | QoS | 1: broker đảm bảo bản tin tới nơi **ít nhất một lần** |
 | Retain | `true`: broker giữ lại trạng thái cuối |
 
-**Vì sao dùng retain?** Nếu Wemos khởi động lại hoặc mất WiFi rồi kết nối lại, ngay khi subscribe nó nhận được
-trạng thái **gần nhất** từ broker, nên LED luôn khớp với lệnh cuối cùng của người dùng. Không có retain thì Wemos phải
+**Vì sao dùng retain?** Nếu ESP32 khởi động lại hoặc mất WiFi rồi kết nối lại, ngay khi subscribe nó nhận được
+trạng thái **gần nhất** từ broker, nên LED luôn khớp với lệnh cuối cùng của người dùng. Không có retain thì ESP32 phải
 chờ lần publish kế tiếp.
 
 ### 4. Giải thích mã nguồn Bài 4
 - **[Bai4/Bai4.ino](Bai4/Bai4.ino)** dùng thư viện **PubSubClient**:
   - `mqtt.setServer()` khai báo IP Raspberry Pi; `mqtt.setCallback(onMqttMessage)` khai báo hàm xử lý bản tin đến.
-  - `connectMqtt()`: kết nối với Client ID riêng (`nhom10-bai4-wemos-<chipId>`, tránh trùng với nhóm khác),
+  - `connectMqtt()`: kết nối với Client ID riêng (`nhom10-bai4-esp32-<địa chỉ MAC>`, tránh trùng với nhóm khác),
     rồi `subscribe(TOPIC_LED, 1)`.
   - `onMqttMessage()`: ghép payload thành chuỗi, đổi sang chữ hoa, rồi `ON` → `digitalWrite(HIGH)`, `OFF` → `LOW`.
   - `loop()` gọi `mqtt.loop()` để nhận bản tin. Mất kết nối thì cứ 3 giây thử lại một lần, không dùng `delay()` chặn.
@@ -731,11 +733,11 @@ chờ lần publish kế tiếp.
    ```bash
    mosquitto_sub -h localhost -t "cq/NT532.R12/nhom10/led" -v
    ```
-5. **Thử retain:** gõ `on`, rút điện Wemos rồi cắm lại. Sau khi kết nối, LED tự sáng mà không cần gửi lệnh mới.
+5. **Thử retain:** gõ `on`, rút điện ESP32 rồi cắm lại. Sau khi kết nối, LED tự sáng mà không cần gửi lệnh mới.
 
 **Ảnh nên chụp cho báo cáo:**
 - Terminal máy tính đang publish.
-- Serial Monitor của Wemos in `[MQTT] cq/NT532.R12/nhom10/led -> ON => BAT den`.
+- Serial Monitor của ESP32 in `[MQTT] cq/NT532.R12/nhom10/led -> ON => BAT den`.
 - `mosquitto_sub` trên Pi.
 - LED sáng và tắt tương ứng.
 - Kết quả thử retain.
@@ -744,10 +746,10 @@ chờ lần publish kế tiếp.
 ### 6. Lỗi thường gặp
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 | :--- | :--- |
-| Serial báo `that bai, rc = -2` liên tục | Wemos không tới được broker: sai `MQTT_BROKER`, Pi khác mạng, hoặc Mosquitto chỉ nghe `127.0.0.1` (thiếu file `lab3.conf`) |
+| Serial báo `that bai, rc = -2` liên tục | ESP32 không tới được broker: sai `MQTT_BROKER`, Pi khác mạng, hoặc Mosquitto chỉ nghe `127.0.0.1` (thiếu file `lab3.conf`) |
 | `rc = 5` (not authorized) | Broker đang yêu cầu tài khoản: kiểm tra dòng `allow_anonymous true` |
 | Script máy tính báo `Không kết nối được broker` | Như trên; thử `ping <IP Pi>` từ máy tính |
-| LED sáng ngược (gửi ON thì tắt) | Nối LED ngược kiểu "kéo lên 3V3": đổi lại Anode vào GPIO14, Cathode xuống GND |
+| LED sáng ngược (gửi ON thì tắt) | Nối LED ngược kiểu "kéo lên 3V3": đổi lại Anode vào GPIO25, Cathode xuống GND |
 | Hai nhóm điều khiển lẫn đèn của nhau | Client ID hoặc topic trùng nhau: giữ đúng tiền tố `cq/NT532.R12/nhom10` |
 
 ---
@@ -755,14 +757,14 @@ chờ lần publish kế tiếp.
 ## BÀI 5: GIÁM SÁT NHIỆT ĐỘ, ĐỘ ẨM VỚI CẢNH BÁO NHIỀU MỨC
 
 ### 1. Yêu cầu Bài 5
-Kịch bản gồm 01 Wemos D1, 01 Raspberry Pi, 01 máy tính, 01 cảm biến nhiệt độ – độ ẩm, 02 LED (xanh, đỏ) và 01 LCD.
+Kịch bản gồm 01 ESP32, 01 Raspberry Pi, 01 máy tính, 01 cảm biến nhiệt độ – độ ẩm, 02 LED (xanh, đỏ) và 01 LCD.
 Raspberry Pi là MQTT Broker:
-- Mỗi **5 giây**, Wemos publish nhiệt độ và độ ẩm dạng JSON vào `cq/NT532.R12/nhom10/dht/value`.
+- Mỗi **5 giây**, ESP32 publish nhiệt độ và độ ẩm dạng JSON vào `cq/NT532.R12/nhom10/dht/value`.
 - Máy tính subscribe topic này và đánh giá **3 mức**:
   - **Bình thường:** nhiệt độ 25–27 °C **và** độ ẩm 40–70%.
   - **Cảnh báo:** một trong hai đại lượng ra ngoài khoảng bình thường.
   - **Nguy hiểm:** nhiệt độ lệch **quá 3 °C** hoặc độ ẩm lệch **quá 15%** so với khoảng bình thường.
-- Máy tính publish mức đánh giá vào `cq/NT532.R12/nhom10/dht/alert`. Wemos subscribe topic đó và thể hiện:
+- Máy tính publish mức đánh giá vào `cq/NT532.R12/nhom10/dht/alert`. ESP32 subscribe topic đó và thể hiện:
   - **xanh sáng liên tục** khi bình thường;
   - **đỏ nhấp nháy chậm** khi cảnh báo;
   - **đỏ nhấp nháy nhanh** khi nguy hiểm;
@@ -771,7 +773,7 @@ Raspberry Pi là MQTT Broker:
   liên tiếp 3 lần đo**, và **chỉ publish khi mức thay đổi**, không publish lặp lại mỗi 5 giây.
 
 ```
- [Wemos + DHT11] ── dht/value (mỗi 5s) ──► [Raspberry Pi: Mosquitto] ──► [Máy tính: bai5_dht_monitor.py]
+ [ESP32 + DHT11] ── dht/value (mỗi 5s) ──► [Raspberry Pi: Mosquitto] ──► [Máy tính: bai5_dht_monitor.py]
        ▲                                                                       │ đánh giá + chống chập chờn
        └──────────── dht/alert (chỉ khi đổi mức) ◄── [Mosquitto] ◄─────────────┘
 ```
@@ -780,22 +782,22 @@ Raspberry Pi là MQTT Broker:
 
 | Linh kiện | Số lượng | Ghi chú |
 | :--- | :---: | :--- |
-| Wemos D1 (ESP8266) | 1 | MQTT Client |
+| ESP32 DevKit | 1 | MQTT Client |
 | DHT11 (module 3 chân) | 1 | Đo nhiệt độ ±2 °C, độ ẩm ±5% |
 | LED xanh, LED đỏ + trở $220\,\Omega$ | 2 | Đèn báo mức |
 | LCD 16x2 I2C | 1 | Địa chỉ 0x27 / 0x3F, code tự dò |
 | Raspberry Pi (Mosquitto) + máy tính | 1 + 1 | Broker + chương trình đánh giá |
 
-| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
-| :--- | :--- | :---: | :---: | :---: |
-| **DHT11** | VCC (+) | 3V3 | 3V3 | 3V3 |
-| | GND (−) | GND | GND | GND |
-| | DATA (OUT) | GPIO14 | D5 | D5 |
-| **LED xanh** | Anode (qua trở $220\,\Omega$) | GPIO12 | D6 | D6 |
-| **LED đỏ** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
-| **LCD I2C** | SDA | GPIO4 | D4 (hoặc chân **SDA** cạnh AREF) | D2 |
-| | SCL | GPIO5 | D3 (hoặc chân **SCL** cạnh AREF) | D1 |
-| | VCC / GND | 5V / GND | 5V / GND | 5V / GND |
+| Linh kiện | Chân linh kiện | GPIO (= số in trên board) |
+| :--- | :--- | :---: |
+| **DHT11** | VCC (+) | 3V3 |
+| | GND (−) | GND |
+| | DATA (OUT) | GPIO27 |
+| **LED xanh** | Anode (qua trở $220\,\Omega$) | GPIO25 |
+| **LED đỏ** | Anode (qua trở $220\,\Omega$) | GPIO26 |
+| **LCD I2C** | SDA | GPIO21 |
+| | SCL | GPIO22 |
+| | VCC / GND | 5V (VIN) / GND |
 
 > Nếu dùng **DHT11 dạng 4 chân rời** (không có module), cần thêm trở $10\,k\Omega$ kéo chân DATA lên 3V3.
 
@@ -803,12 +805,12 @@ Raspberry Pi là MQTT Broker:
 
 | Topic | Chiều | Payload mẫu | QoS / Retain |
 | :--- | :--- | :--- | :--- |
-| `cq/NT532.R12/nhom10/dht/value` | Wemos → máy tính | `{"temperature": 26.0, "humidity": 55.0}` | 0 / không |
-| `cq/NT532.R12/nhom10/dht/alert` | Máy tính → Wemos | `{"level": "DANGER", "label": "NGUY HIỂM", "temperature": 31.0, "humidity": 55.0, "reason": "nhiệt độ lệch 4.0°C"}` | 1 / **có** |
+| `cq/NT532.R12/nhom10/dht/value` | ESP32 → máy tính | `{"temperature": 26.0, "humidity": 55.0}` | 0 / không |
+| `cq/NT532.R12/nhom10/dht/alert` | Máy tính → ESP32 | `{"level": "DANGER", "label": "NGUY HIỂM", "temperature": 31.0, "humidity": 55.0, "reason": "nhiệt độ lệch 4.0°C"}` | 1 / **có** |
 
-- `level` là một trong `NORMAL`, `WARNING`, `DANGER`. Wemos chỉ đọc trường này; các trường còn lại để người xem log
+- `level` là một trong `NORMAL`, `WARNING`, `DANGER`. ESP32 chỉ đọc trường này; các trường còn lại để người xem log
   hiểu vì sao đổi mức.
-- Alert được publish với **retain**, nên Wemos khởi động lại vẫn nhận ngay mức hiện tại, không phải chờ lần đổi mức kế tiếp.
+- Alert được publish với **retain**, nên ESP32 khởi động lại vẫn nhận ngay mức hiện tại, không phải chờ lần đổi mức kế tiếp.
 
 ### 4. Thuật toán đánh giá trên máy tính
 
@@ -842,7 +844,7 @@ T=28.0°C H=55.0% -> lần đo này: CẢNH BÁO (nhiệt độ lệch 1.0°C) |
 >>> ĐỔI MỨC: CẢNH BÁO - publish cq/NT532.R12/nhom10/dht/alert
 ```
 
-### 5. Thể hiện trên Wemos
+### 5. Thể hiện trên ESP32
 
 | Mức nhận được | LED xanh | LED đỏ | LCD dòng 2 |
 | :--- | :--- | :--- | :--- |
@@ -897,8 +899,8 @@ Mất kết nối broker thì dòng 2 hiện `Mat ket noi MQTT`.
 ### 8. Lỗi thường gặp
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 | :--- | :--- |
-| LCD báo `Loi cam bien DHT` | Sai chân DATA (phải là GPIO14), thiếu trở kéo lên với DHT11 rời, hoặc chọn nhầm `DHT22` |
-| Máy tính nhận dữ liệu nhưng Wemos không đổi đèn | Wemos chưa subscribe được: kiểm tra Serial có dòng `Da subscribe: .../dht/alert` |
+| LCD báo `Loi cam bien DHT` | Sai chân DATA (phải là GPIO27), thiếu trở kéo lên với DHT11 rời, hoặc chọn nhầm `DHT22` |
+| Máy tính nhận dữ liệu nhưng ESP32 không đổi đèn | ESP32 chưa subscribe được: kiểm tra Serial có dòng `Da subscribe: .../dht/alert` |
 | Mới chạy được vài giây mà chưa có mức nào | Bình thường: cần 3 lần đo (khoảng 15 s) mới xác định mức đầu tiên |
 | Mức không đổi dù giá trị đã khác | Phải đúng **3 lần liên tiếp**; một lần đo xen kẽ mức khác sẽ làm đếm lại |
-| LCD không hiển thị | Bài 5 dùng chân I2C mặc định (GPIO4/GPIO5), khác Bài 1 (GPIO2/GPIO0) |
+| LCD không hiển thị | Kiểm tra SDA→GPIO21, SCL→GPIO22, LCD cấp 5V; vặn biến trở tương phản sau module I2C |

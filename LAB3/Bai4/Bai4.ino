@@ -1,24 +1,24 @@
 /**
  * ============================================================================
- * LAB 3 - BÀI 4: ĐIỀU KHIỂN LED QUA MQTT (WEMOS D1 - RASPBERRY PI - MÁY TÍNH)
+ * LAB 3 - BÀI 4: ĐIỀU KHIỂN LED QUA MQTT (ESP32 - RASPBERRY PI - MÁY TÍNH)
  * Môn học: Công nghệ Internet of Things Hiện đại - UIT
  *
  * KỊCH BẢN:
  * - Raspberry Pi chạy MQTT Broker (Mosquitto).
  * - Máy tính (pc/bai4_led_control.py hoặc MQTTX) publish trạng thái đèn
  *   "ON" / "OFF" vào topic cq/NT532.R12/nhom10/led.
- * - Wemos D1 subscribe topic đó, nhận trạng thái rồi bật/tắt LED.
+ * - ESP32 subscribe topic đó, nhận trạng thái rồi bật/tắt LED.
  *
- * PHẦN CỨNG: 1 Wemos D1, 1 LED + 1 điện trở 220 Ohm.
+ * PHẦN CỨNG: 1 ESP32 DevKit, 1 LED + 1 điện trở 220 Ohm.
  *
- * SƠ ĐỒ NỐI DÂY (ghi theo số GPIO, nhãn in trên board xem bảng trong README):
- *   LED: Anode -> trở 220 Ohm -> GPIO14 (nhãn D5 trên cả 2 loại board), Cathode -> GND
+ * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D25/G25/IO25):
+ *   LED: Anode -> trở 220 Ohm -> GPIO25, Cathode -> GND
  *
  * THƯ VIỆN: PubSubClient (Nick O'Leary)
  * ============================================================================
  */
 
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <PubSubClient.h>
 
 const char *WIFI_SSID = "UiTiOt-E3.1";
@@ -29,7 +29,7 @@ const char *MQTT_BROKER = "192.168.1.20";
 const int MQTT_PORT = 1883;
 const char *TOPIC_LED = "cq/NT532.R12/nhom10/led";
 
-const int LED_PIN = 14;
+const int LED_PIN = 25;
 const unsigned long RECONNECT_INTERVAL = 3000;
 
 WiFiClient wifiClient;
@@ -69,7 +69,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 }
 
 bool connectMqtt() {
-  String clientId = "nhom10-bai4-wemos-" + String(ESP.getChipId(), HEX);
+  String clientId = "nhom10-bai4-esp32-" + String((uint32_t)ESP.getEfuseMac(), HEX);
   Serial.print("[MQTT] Ket noi broker ");
   Serial.print(MQTT_BROKER);
   Serial.print("... ");
@@ -80,7 +80,7 @@ bool connectMqtt() {
     return false;
   }
   Serial.println("thanh cong");
-  // QoS 1: broker đảm bảo gửi tới Wemos ít nhất 1 lần
+  // QoS 1: broker đảm bảo gửi tới ESP32 ít nhất 1 lần
   mqtt.subscribe(TOPIC_LED, 1);
   Serial.print("[MQTT] Da subscribe: ");
   Serial.println(TOPIC_LED);

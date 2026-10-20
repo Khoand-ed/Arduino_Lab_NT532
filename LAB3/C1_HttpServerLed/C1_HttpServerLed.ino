@@ -3,18 +3,17 @@
  * LAB 3 - PHẦN C.1: TƯƠNG TÁC VỚI ĐÈN LED THÔNG QUA HTTP SERVER
  * Môn học: Công nghệ Internet of Things Hiện đại - UIT
  *
- * Code mẫu theo tài liệu thực hành: dựng HTTP Server trên Wemos D1,
+ * Code mẫu theo tài liệu thực hành (chuyển sang ESP32): dựng HTTP Server,
  * bật/tắt LED tích hợp (GPIO2) qua 2 nút ON/OFF trên trang web.
  *
- * Board: Tools -> Board -> ESP8266 Boards -> LOLIN(WEMOS) D1 R2 & mini
+ * Board: Tools -> Board -> esp32 -> ESP32 Dev Module
  * Sau khi nạp, mở Serial Monitor (115200 baud) để xem địa chỉ IP,
- * rồi gõ IP đó vào trình duyệt (máy tính phải cùng mạng WiFi với Wemos).
+ * rồi gõ IP đó vào trình duyệt (máy tính phải cùng mạng WiFi với ESP32).
  * ============================================================================
  */
 
-#include <ESP8266WiFi.h>
-#include <WiFiClient.h>
-#include <ESP8266WebServer.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
@@ -55,30 +54,30 @@ const char LEDOFF_page[] PROGMEM = R"=====(
 </html>
 )=====";
 
-// LED tích hợp nối với GPIO2, hoạt động mức thấp (LOW = sáng)
-#define LED LED_BUILTIN
+// LED tích hợp của ESP32 DevKit nối với GPIO2, hoạt động mức cao (HIGH = sáng)
+#define LED 2
 
 // Tên và mật khẩu WiFi
 const char *ssid = "UiTiOt-E3.1";
 const char *password = "UiTiOtAP";
 
-ESP8266WebServer server(80);
+WebServer server(80);
 
 void handleRoot() {
   Serial.println("You called root page");
-  server.send_P(200, "text/html", MAIN_page);
+  server.send(200, "text/html", MAIN_page);
 }
 
 void handleLEDon() {
   Serial.println("LED on page");
-  digitalWrite(LED, LOW);
-  server.send_P(200, "text/html", LEDON_page);
+  digitalWrite(LED, HIGH);
+  server.send(200, "text/html", LEDON_page);
 }
 
 void handleLEDoff() {
   Serial.println("LED off page");
-  digitalWrite(LED, HIGH);
-  server.send_P(200, "text/html", LEDOFF_page);
+  digitalWrite(LED, LOW);
+  server.send(200, "text/html", LEDOFF_page);
 }
 
 void setup() {
@@ -89,7 +88,7 @@ void setup() {
   Serial.println("");
 
   pinMode(LED, OUTPUT);
-  digitalWrite(LED, HIGH);
+  digitalWrite(LED, LOW);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);

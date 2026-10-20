@@ -2,15 +2,15 @@
 LAB 3 - BÀI 2: SERVER CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH (chạy trên máy tính)
 
 RESTful API (mọi phản hồi theo định dạng {"error", "message", "data"}):
-    GET  /api/config   Wemos lấy bộ cấu hình hiện tại
+    GET  /api/config   ESP32 lấy bộ cấu hình hiện tại
     PUT  /api/config   Người dùng đổi cấu hình (Postman), mỗi lần đổi version + 1
-    PUT  /api/sensor   Wemos gửi dữ liệu cảm biến, server in ra command line
+    PUT  /api/sensor   ESP32 gửi dữ liệu cảm biến, server in ra command line
     GET  /api/sensor   Xem bản tin cảm biến gần nhất
 
 Bộ cấu hình (lưu trong pc/data/bai2_config.json để không mất khi tắt server):
     warning_threshold  ngưỡng cảnh báo (% ánh sáng): dưới ngưỡng này bắt đầu cần bật đèn
     alarm_threshold    ngưỡng báo động (% ánh sáng): dưới ngưỡng này -> chớp tất cả đèn
-    send_interval      chu kỳ Wemos lấy cấu hình và gửi dữ liệu (giây)
+    send_interval      chu kỳ ESP32 lấy cấu hình và gửi dữ liệu (giây)
     version            số phiên bản cấu hình, server tự tăng
 
 Chạy:  python bai2_server.py            (mặc định cổng 5000)
@@ -140,11 +140,11 @@ def put_sensor():
     person_text = "CÓ người" if data.get("person") else "không có người"
     print(f"[{now()}] PUT  /api/sensor  từ {request.remote_addr} | ánh sáng {data.get('light')}% | "
           f"khoảng cách {distance_text} | {person_text} | đèn sáng: {data.get('lamps')} | "
-          f"chế độ {data.get('mode')} | cấu hình Wemos v{data.get('config_version')}")
+          f"chế độ {data.get('mode')} | cấu hình ESP32 v{data.get('config_version')}")
     if data.get("mode") == "OVER_THRESHOLD":
-        print(f"[{now()}] >>> Ánh sáng vượt ngưỡng báo động, Wemos đang chớp đèn: hãy cập nhật ngưỡng mới!")
+        print(f"[{now()}] >>> Ánh sáng vượt ngưỡng báo động, ESP32 đang chớp đèn: hãy cập nhật ngưỡng mới!")
     if data.get("config_version") != current_version:
-        print(f"[{now()}] >>> Wemos đang dùng v{data.get('config_version')}, server có v{current_version} "
+        print(f"[{now()}] >>> ESP32 đang dùng v{data.get('config_version')}, server có v{current_version} "
               f"(sẽ cập nhật ở chu kỳ sau)")
     return reply(False, "Server đã nhận dữ liệu", {"config_version": current_version})
 
@@ -154,7 +154,7 @@ def get_sensor():
     with lock:
         data = last_sensor
     if data is None:
-        return reply(True, "Chưa nhận được dữ liệu nào từ Wemos", None, 404)
+        return reply(True, "Chưa nhận được dữ liệu nào từ ESP32", None, 404)
     return reply(False, "Bản tin cảm biến gần nhất", data)
 
 

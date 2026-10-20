@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * LAB 3 - BÀI 2: CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH (WEMOS D1 LÀ HTTP CLIENT)
+ * LAB 3 - BÀI 2: CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH (ESP32 LÀ HTTP CLIENT)
  * Môn học: Công nghệ Internet of Things Hiện đại - UIT
  *
  * KỊCH BẢN:
  * - Máy tính chạy pc/bai2_server.py, lưu bộ cấu hình: ngưỡng cảnh báo,
  *   ngưỡng báo động, chu kỳ gửi dữ liệu, số phiên bản.
- * - Cứ mỗi chu kỳ, Wemos gửi GET /api/config lấy cấu hình về (phiên bản mới
+ * - Cứ mỗi chu kỳ, ESP32 gửi GET /api/config lấy cấu hình về (phiên bản mới
  *   thì áp dụng ngay), rồi gửi PUT /api/sensor kèm dữ liệu cảm biến (JSON).
  * - Có người tiếp cận (cảm biến khoảng cách < 50 cm): bật số đèn tùy độ sáng.
  *     ánh sáng >= ngưỡng cảnh báo           -> trời đủ sáng, 0 đèn
@@ -16,21 +16,21 @@
  * - Ánh sáng < ngưỡng báo động (vượt ngưỡng) -> chớp tắt liên tục cả 3 đèn để
  *   báo người dùng cập nhật ngưỡng mới.
  *
- * PHẦN CỨNG: 1 Wemos D1, 1 module quang trở (có chân AO), 1 HC-SR04,
+ * PHẦN CỨNG: 1 ESP32 DevKit, 1 module quang trở (có chân AO), 1 HC-SR04,
  *            3 LED + 3 điện trở 220 Ohm, 2 điện trở 1k + 2k (chia áp ECHO).
  *
- * SƠ ĐỒ NỐI DÂY (ghi theo số GPIO, nhãn in trên board xem bảng trong README):
- *   Module quang trở: VCC->3V3, GND->GND, AO->A0
- *   HC-SR04: VCC->5V, GND->GND, TRIG->GPIO14,
- *            ECHO->trở 1k->GPIO12, và GPIO12->trở 2k->GND (hạ 5V xuống ~3.3V)
- *   LED 1, 2, 3: GPIO5, GPIO4, GPIO13 (qua trở 220 Ohm), cathode -> GND
+ * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D34/G34/IO34):
+ *   Module quang trở: VCC->3V3, GND->GND, AO->GPIO34 (chân ADC1)
+ *   HC-SR04: VCC->5V (VIN), GND->GND, TRIG->GPIO18,
+ *            ECHO->trở 1k->GPIO19, và GPIO19->trở 2k->GND (hạ 5V xuống ~3.3V)
+ *   LED 1, 2, 3: GPIO25, GPIO26, GPIO27 (qua trở 220 Ohm), cathode -> GND
  *
  * THƯ VIỆN: ArduinoJson (Benoit Blanchon) phiên bản 7.x
  * ============================================================================
  */
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
 
@@ -40,10 +40,11 @@ const char *WIFI_PASS = "UiTiOtAP";
 // Địa chỉ máy tính chạy bai2_server.py (server in ra dòng này khi khởi động)
 const char *SERVER_URL = "http://192.168.1.10:5000";
 
-const int LIGHT_PIN = A0;
-const int TRIG_PIN = 14;
-const int ECHO_PIN = 12;
-const int LAMP_PINS[3] = {5, 4, 13};
+// Phải dùng chân ADC1 (GPIO32..39): ADC2 không đọc được khi WiFi đang bật
+const int LIGHT_PIN = 34;
+const int TRIG_PIN = 18;
+const int ECHO_PIN = 19;
+const int LAMP_PINS[3] = {25, 26, 27};
 const int NUM_LAMPS = 3;
 
 // Module quang trở phổ biến: càng tối thì AO càng cao. Nếu che cảm biến mà
@@ -86,7 +87,7 @@ int readLightPercent() {
     total += analogRead(LIGHT_PIN);
   }
   int raw = total / 4;
-  int percent = map(raw, 0, 1023, 0, 100);
+  int percent = map(raw, 0, 4095, 0, 100);  // ADC 12 bit của ESP32
   if (LDR_HIGHER_IS_DARKER) {
     percent = 100 - percent;
   }
@@ -222,7 +223,7 @@ void fetchConfig() {
 void sendSensorData() {
   JsonDocument doc;
   doc["error"] = false;
-  doc["message"] = "Wemos D1 sensor report";
+  doc["message"] = "ESP32 sensor report";
   JsonObject data = doc["data"].to<JsonObject>();
   data["temperature"] = nullptr;  // kịch bản không có cảm biến nhiệt độ
   data["light"] = lightPercent;

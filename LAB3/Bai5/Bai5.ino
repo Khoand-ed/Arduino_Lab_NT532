@@ -5,30 +5,30 @@
  *
  * KỊCH BẢN:
  * - Raspberry Pi chạy MQTT Broker (Mosquitto).
- * - Mỗi 5 giây, Wemos đọc DHT11 và publish JSON vào cq/NT532.R12/nhom10/dht/value
+ * - Mỗi 5 giây, ESP32 đọc DHT11 và publish JSON vào cq/NT532.R12/nhom10/dht/value
  *       {"temperature": 26.0, "humidity": 55.0}
  * - Máy tính (pc/bai5_dht_monitor.py) đánh giá 3 mức rồi publish vào
  *   cq/NT532.R12/nhom10/dht/alert khi mức thay đổi.
- * - Wemos subscribe topic alert và thể hiện:
+ * - ESP32 subscribe topic alert và thể hiện:
  *     BÌNH THƯỜNG -> LED xanh sáng liên tục
  *     CẢNH BÁO    -> LED đỏ nhấp nháy chậm (1 Hz)
  *     NGUY HIỂM   -> LED đỏ nhấp nháy nhanh (5 Hz)
  *   LCD hiển thị giá trị đo và tên mức hiện tại.
  *
- * PHẦN CỨNG: 1 Wemos D1, 1 DHT11, 2 LED (xanh, đỏ) + 2 trở 220 Ohm,
+ * PHẦN CỨNG: 1 ESP32 DevKit, 1 DHT11, 2 LED (xanh, đỏ) + 2 trở 220 Ohm,
  *            1 LCD 16x2 có module I2C.
  *
- * SƠ ĐỒ NỐI DÂY (ghi theo số GPIO, nhãn in trên board xem bảng trong README):
- *   DHT11   : VCC->3V3, GND->GND, DATA->GPIO14 (module 3 chân đã có trở kéo lên)
- *   LED xanh: GPIO12 (qua trở 220 Ohm), LED đỏ: GPIO13 (qua trở 220 Ohm), cathode->GND
- *   LCD I2C : SDA->GPIO4, SCL->GPIO5, VCC->5V, GND->GND
+ * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D27/G27/IO27):
+ *   DHT11   : VCC->3V3, GND->GND, DATA->GPIO27 (module 3 chân đã có trở kéo lên)
+ *   LED xanh: GPIO25 (qua trở 220 Ohm), LED đỏ: GPIO26 (qua trở 220 Ohm), cathode->GND
+ *   LCD I2C : SDA->GPIO21, SCL->GPIO22, VCC->5V, GND->GND
  *
  * THƯ VIỆN: PubSubClient, ArduinoJson 7.x, DHT sensor library (Adafruit)
  *           + Adafruit Unified Sensor, LiquidCrystal_I2C
  * ============================================================================
  */
 
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
@@ -44,12 +44,12 @@ const int MQTT_PORT = 1883;
 const char *TOPIC_VALUE = "cq/NT532.R12/nhom10/dht/value";
 const char *TOPIC_ALERT = "cq/NT532.R12/nhom10/dht/alert";
 
-const int DHT_PIN = 14;
+const int DHT_PIN = 27;
 const int DHT_TYPE = DHT11;
-const int GREEN_LED_PIN = 12;
-const int RED_LED_PIN = 13;
-const int LCD_SDA_PIN = 4;
-const int LCD_SCL_PIN = 5;
+const int GREEN_LED_PIN = 25;
+const int RED_LED_PIN = 26;
+const int LCD_SDA_PIN = 21;
+const int LCD_SCL_PIN = 22;
 
 const unsigned long PUBLISH_INTERVAL = 5000;
 const unsigned long SLOW_BLINK_INTERVAL = 500;  // 1 Hz: 0.5s sáng, 0.5s tắt
@@ -187,7 +187,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 }
 
 bool connectMqtt() {
-  String clientId = "nhom10-bai5-wemos-" + String(ESP.getChipId(), HEX);
+  String clientId = "nhom10-bai5-esp32-" + String((uint32_t)ESP.getEfuseMac(), HEX);
   Serial.print("[MQTT] Ket noi broker ");
   Serial.print(MQTT_BROKER);
   Serial.print("... ");
