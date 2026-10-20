@@ -21,6 +21,9 @@
    - [Chạy thử & Gợi ý ảnh chụp cho báo cáo](#6-chạy-thử--gợi-ý-ảnh-chụp-cho-báo-cáo)
    - [Lỗi thường gặp](#7-lỗi-thường-gặp)
 7. [BÀI 2: Cấu hình từ xa đèn đường thông minh](#bài-2-cấu-hình-từ-xa-đèn-đường-thông-minh)
+8. [PHẦN C.2: Chuẩn bị Raspberry Pi (SSH, VNC)](#phần-c2-chuẩn-bị-raspberry-pi-ssh-vnc)
+9. [Cài đặt MQTT Broker Mosquitto trên Raspberry Pi](#cài-đặt-mqtt-broker-mosquitto-trên-raspberry-pi)
+10. [BÀI 3: Kiểm tra bộ lọc topic MQTT](#bài-3-kiểm-tra-bộ-lọc-topic-mqtt)
 
 ---
 
@@ -29,10 +32,10 @@
 | Phần | Giao thức | Nội dung | Trạng thái |
 | :--- | :--- | :--- | :---: |
 | C.1 | HTTP | Wemos D1 làm HTTP Server, bật/tắt LED tích hợp qua web | ✅ |
-| C.2 | — | Cài Raspberry Pi OS, SSH, VNC | ⏳ |
+| C.2 | — | Cài Raspberry Pi OS, SSH, VNC | ✅ |
 | Bài 1 | HTTP (Wemos là server) | Trò chơi ghi nhớ dãy số: LED 7 đoạn + LCD + web | ✅ |
 | Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
-| Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ⏳ |
+| Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ✅ |
 | Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ⏳ |
 | Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ⏳ |
 
@@ -55,10 +58,14 @@ LAB3/
 ├── Bai2/
 │   └── Bai2.ino                                 # Bài 2: Wemos (HTTP client) điều khiển đèn đường
 │
+├── raspberry/
+│   └── lab3.conf                                # Cấu hình Mosquitto (MQTT Broker) cho Raspberry Pi
+│
 └── pc/                                          # Chương trình chạy trên máy tính (Python)
     ├── requirements.txt                         # Thư viện Python cần cài
     ├── bai2_server.py                           # Bài 2: RESTful API lưu cấu hình
-    └── Lab03_Bai2.postman_collection.json       # Bài 2: các request mẫu cho Postman
+    ├── Lab03_Bai2.postman_collection.json       # Bài 2: các request mẫu cho Postman
+    └── bai3_topic_filter_test.py                # Bài 3: script đối chiếu kết quả bộ lọc topic
 ```
 
 ---
@@ -507,3 +514,142 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 | Khoảng cách luôn `null` | Kiểm tra cầu chia áp ECHO, cấp **5V** cho HC-SR04, đúng chân TRIG/ECHO |
 | % ánh sáng tăng khi che cảm biến | Đổi `LDR_HIGHER_IS_DARKER = false` |
 | Đèn chập chờn khi đứng yên | Tăng `PERSON_HOLD_MS` hoặc giảm `PERSON_DISTANCE_CM` |
+
+---
+
+## PHẦN C.2: CHUẨN BỊ RASPBERRY PI (SSH, VNC)
+
+Làm theo tài liệu (Bước 1 → 15), tóm tắt và các lưu ý:
+
+1. Tải **Raspberry Pi Imager** tại <https://www.raspberrypi.com/software/> và cài lên máy tính.
+2. Chọn OS **Raspberry Pi OS (64-bit) with desktop** (bản có giao diện để dùng VNC). Chọn thẻ nhớ MicroSD.
+3. Mở phần cấu hình nâng cao (`Ctrl + Shift + X`, hoặc nút **Edit settings / Customisation** ở Imager bản mới):
+   - **Hostname:** ví dụ `nhom10-pi`.
+   - **Username / Password:** bắt buộc tự tạo. Raspberry Pi OS bản mới **không còn** tài khoản mặc định `pi/raspberry`.
+   - **WiFi:** SSID và mật khẩu mạng lab (ví dụ `UiTiOt-E3.1`), **Wireless LAN country: VN**.
+   - **Services → Enable SSH** (dùng mật khẩu).
+4. Nhấn **WRITE**, chờ ghi xong, cắm thẻ vào Pi và cấp nguồn. Lần khởi động đầu mất vài phút.
+5. **SSH** bằng PuTTY, hoặc ngay trong terminal của Windows:
+   ```bash
+   ssh <username>@nhom10-pi.local
+   ```
+   Nếu không phân giải được `.local`, tìm IP của Pi bằng phần mềm quét mạng (Advanced IP Scanner, Fing...) rồi SSH
+   bằng IP. Khi đã vào được Pi, xem IP bằng `hostname -I`.
+6. **Bật VNC:**
+   ```bash
+   sudo raspi-config
+   ```
+   Chọn **Interface Options → VNC → Yes**, rồi **Finish**.
+7. Trên máy tính cài **RealVNC Viewer** (<https://www.realvnc.com/en/connect/download/viewer/>), gõ IP của Pi,
+   đăng nhập bằng username/password đã tạo.
+
+> **VNC không kết nối được / màn hình đen?** Raspberry Pi OS bản mới chạy Wayland. Vào `sudo raspi-config` →
+> **Advanced Options → Wayland → X11**, khởi động lại rồi thử lại.
+> Nếu Pi không cắm màn hình và VNC báo lỗi độ phân giải: **Display Options → VNC Resolution** → chọn `1280x720`.
+
+---
+
+## CÀI ĐẶT MQTT BROKER MOSQUITTO TRÊN RASPBERRY PI
+
+Raspberry Pi đóng vai trò **MQTT Broker** cho Bài 3, 4, 5. Nếu lab đã cài sẵn thì chỉ cần làm bước 3 để kiểm tra.
+
+1. **Cài Mosquitto** (SSH vào Pi):
+   ```bash
+   sudo apt update && sudo apt install -y mosquitto mosquitto-clients
+   ```
+2. **Mở cổng cho máy khác kết nối.** Mosquitto 2.x **mặc định chỉ nhận kết nối từ chính Pi**, nên Wemos và laptop sẽ
+   bị từ chối nếu bỏ qua bước này. Tạo file cấu hình giống [raspberry/lab3.conf](raspberry/lab3.conf):
+   ```bash
+   sudo nano /etc/mosquitto/conf.d/lab3.conf
+   ```
+   Dán nội dung sau, lưu lại (`Ctrl+O`, `Enter`, `Ctrl+X`):
+   ```
+   listener 1883 0.0.0.0
+   allow_anonymous true
+   ```
+   Rồi khởi động lại dịch vụ:
+   ```bash
+   sudo systemctl restart mosquitto
+   ```
+3. **Kiểm tra broker đang chạy và nghe ở mọi địa chỉ:**
+   ```bash
+   systemctl status mosquitto
+   ```
+   ```bash
+   sudo ss -ltnp | grep 1883
+   ```
+   Kết quả đúng phải có `0.0.0.0:1883`. Nếu chỉ thấy `127.0.0.1:1883` thì bước 2 chưa có tác dụng.
+4. **Thử nhanh ngay trên Pi.** Mở 2 cửa sổ SSH:
+   ```bash
+   mosquitto_sub -h localhost -t "cq/NT532.R12/nhom10/#" -v
+   ```
+   ```bash
+   mosquitto_pub -h localhost -t "cq/NT532.R12/nhom10/test" -m "hello"
+   ```
+   Cửa sổ thứ nhất in `cq/NT532.R12/nhom10/test hello` là broker hoạt động.
+
+---
+
+## BÀI 3: KIỂM TRA BỘ LỌC TOPIC MQTT
+
+### 1. Yêu cầu Bài 3
+- SSH hoặc VNC vào Raspberry Pi để kiểm tra hoạt động của MQTT Broker.
+- Dùng một phần mềm MQTT Client (MQTTX, MQTT Explorer, MQTTLens...). **Client 2** publish vào 4 topic:
+
+| Ký hiệu | Topic |
+| :---: | :--- |
+| T1 | `cq/NT532.R12/nhom10/home/room1/temp` |
+| T2 | `cq/NT532.R12/nhom10/home/room1/hum` |
+| T3 | `cq/NT532.R12/nhom10/home/room2/temp` |
+| T4 | `cq/NT532.R12/nhom10/home/room2/light/level` |
+
+- **Client 1** lần lượt subscribe **từng** bộ lọc: `.../home/room1/temp`, `.../home/+/temp`, `.../home/room1/#`,
+  `.../home/#` và `home/+`. Ghi nhận bộ lọc nào nhận được thông điệp nào, tổng hợp thành bảng và giải thích.
+
+> ⚠️ Trong PDF, topic thứ 4 có dấu cách thừa: `cq/Y/nhomX/ home/room2/light/level`. **Gõ liền, không có dấu cách.**
+> Dấu cách là ký tự hợp lệ trong topic, nên `" home"` sẽ thành một cấp khác hẳn `home` và không bộ lọc nào khớp.
+
+### 2. Các bước làm với MQTTX
+1. Tải **MQTTX** (<https://mqttx.app>). Tạo kết nối **Client 1**: Host = IP Raspberry Pi, Port = `1883`, không cần
+   username. Nhấn **Connect**.
+2. Tạo thêm kết nối **Client 2** giống hệt (Client ID khác).
+3. Ở **Client 1**: **New Subscription**, nhập bộ lọc thứ nhất (`cq/NT532.R12/nhom10/home/room1/temp`).
+4. Ở **Client 2**: lần lượt publish vào T1 → T4 (payload tùy ý, ví dụ `T1`, `T2`...).
+5. Xem **Client 1** nhận được những thông điệp nào, chụp màn hình. **Unsubscribe** bộ lọc đó.
+6. Lặp lại bước 3 → 5 cho 4 bộ lọc còn lại.
+
+> Mỗi lần chỉ subscribe **một** bộ lọc. Nếu subscribe cùng lúc nhiều bộ lọc chồng nhau, broker có thể gộp thông điệp,
+> và khi đó không biết thông điệp đến nhờ bộ lọc nào.
+
+Có thể đối chiếu bằng script tự động, kết quả dưới đây đã được chạy thử:
+```bash
+python bai3_topic_filter_test.py --broker <IP Raspberry Pi>
+```
+
+### 3. Kết quả
+| Bộ lọc Client 1 subscribe | T1 room1/temp | T2 room1/hum | T3 room2/temp | T4 room2/light/level |
+| :--- | :---: | :---: | :---: | :---: |
+| `cq/NT532.R12/nhom10/home/room1/temp` | ✅ | | | |
+| `cq/NT532.R12/nhom10/home/+/temp` | ✅ | | ✅ | |
+| `cq/NT532.R12/nhom10/home/room1/#` | ✅ | ✅ | | |
+| `cq/NT532.R12/nhom10/home/#` | ✅ | ✅ | ✅ | ✅ |
+| `home/+` | | | | |
+
+### 4. Giải thích cách bộ lọc hoạt động
+Topic được chia cấp bằng dấu `/`. Broker so khớp bộ lọc với topic **từng cấp một, từ trái sang phải**:
+- **Không có ký tự đại diện** (`.../home/room1/temp`): phải trùng khớp tuyệt đối, nên chỉ nhận **T1**.
+- **`+` thay cho đúng MỘT cấp** (`.../home/+/temp`): `+` khớp với `room1` và `room2`, nhưng cấp cuối vẫn phải là `temp`.
+  Nhận **T1, T3**. Không nhận T2 (cấp cuối là `hum`) và T4 (có 5 cấp sau `home`, nhiều hơn bộ lọc).
+- **`#` thay cho MỌI cấp còn lại** (phải đứng cuối bộ lọc):
+  - `.../home/room1/#` nhận mọi topic bắt đầu bằng `.../home/room1/` → **T1, T2**.
+    (Theo chuẩn, `#` còn khớp cả chính cấp cha `.../home/room1`.)
+  - `.../home/#` nhận mọi topic dưới `home`, bất kể sâu bao nhiêu cấp → **T1, T2, T3, T4**.
+- **`home/+` không nhận gì**, vì hai lý do:
+  1. Việc so khớp bắt đầu từ cấp đầu tiên. Cấp đầu của mọi topic là `cq`, khác `home`.
+  2. `+` chỉ thay **một** cấp, nên `home/+` chỉ khớp topic đúng 2 cấp như `home/room1`.
+     Kể cả topic `home/room1/temp` cũng không khớp.
+- **Ý nghĩa thực tế:** thiết bị chỉ cần một bộ lọc để nhận cả nhóm dữ liệu. Ví dụ dashboard theo dõi mọi phòng dùng
+  `.../home/#`, còn bộ điều hòa chỉ cần nhiệt độ các phòng dùng `.../home/+/temp`.
+
+**Ảnh nên chụp cho báo cáo:** SSH vào Pi với kết quả `systemctl status mosquitto` và `ss -ltnp | grep 1883`;
+màn hình MQTTX của Client 1 ứng với **mỗi** bộ lọc (5 ảnh); màn hình Client 2 lúc publish.
