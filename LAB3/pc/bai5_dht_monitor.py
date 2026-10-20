@@ -9,7 +9,7 @@ LAB 3 - BÀI 5: ĐÁNH GIÁ NHIỆT ĐỘ, ĐỘ ẨM VỚI CẢNH BÁO NHIỀU 
     CẢNH BÁO    (WARNING): các trường hợp còn lại (có đại lượng ra ngoài khoảng bình thường)
 - Chống chập chờn: chỉ chuyển sang mức mới khi điều kiện của mức đó đúng
   3 lần đo LIÊN TIẾP; chỉ publish vào cq/NT532.R12/nhom10/dht/alert khi mức
-  thay đổi (retain=True để ESP32 kết nối lại vẫn nhận được mức hiện tại).
+  thay đổi (retain=True để ESP kết nối lại vẫn nhận được mức hiện tại).
 
 Chạy:  python bai5_dht_monitor.py --broker <IP Raspberry Pi>
 """

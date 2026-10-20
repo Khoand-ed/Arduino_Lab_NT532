@@ -22,7 +22,7 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"warning_threshold\": 60,\n  \"alarm_threshold\": 20,\n  \"send_interval\": 5\n}"
+          "raw": "{\n  \"warning_threshold\": 200,\n  \"alarm_threshold\": 20,\n  \"send_interval\": 5\n}"
         },
         "url": "{{base_url}}/api/config"
       }

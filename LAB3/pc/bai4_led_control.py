@@ -2,7 +2,7 @@
 LAB 3 - BÀI 4: ĐIỀU KHIỂN LED QUA MQTT (chạy trên máy tính)
 
 Máy tính là một MQTT Client, publish trạng thái đèn vào topic
-cq/NT532.R12/nhom10/led. ESP32 subscribe topic này để bật/tắt LED.
+cq/NT532.R12/nhom10/led. ESP subscribe topic này để bật/tắt LED.
 
 Chạy chế độ gõ lệnh:   python bai4_led_control.py --broker <IP Raspberry Pi>
     on / off   -> publish "ON" / "OFF"
@@ -10,7 +10,7 @@ Chạy chế độ gõ lệnh:   python bai4_led_control.py --broker <IP Raspber
     q          -> thoát
 Gửi 1 lệnh rồi thoát:  python bai4_led_control.py --broker <IP> --state on
 
-Bản tin được publish với retain=True: broker giữ lại trạng thái cuối, ESP32
+Bản tin được publish với retain=True: broker giữ lại trạng thái cuối, ESP
 khởi động lại (hoặc kết nối lại) sẽ nhận ngay trạng thái hiện tại.
 """
 

@@ -2,15 +2,15 @@
 LAB 3 - BÀI 2: SERVER CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH (chạy trên máy tính)
 
 RESTful API (mọi phản hồi theo định dạng {"error", "message", "data"}):
-    GET  /api/config   ESP32 lấy bộ cấu hình hiện tại
+    GET  /api/config   ESP lấy bộ cấu hình hiện tại
     PUT  /api/config   Người dùng đổi cấu hình (Postman), mỗi lần đổi version + 1
-    PUT  /api/sensor   ESP32 gửi dữ liệu cảm biến, server in ra command line
+    PUT  /api/sensor   ESP gửi dữ liệu cảm biến, server in ra command line
     GET  /api/sensor   Xem bản tin cảm biến gần nhất
 
-Bộ cấu hình (lưu trong pc/data/bai2_config.json để không mất khi tắt server):
-    warning_threshold  ngưỡng cảnh báo (% ánh sáng): dưới ngưỡng này bắt đầu cần bật đèn
-    alarm_threshold    ngưỡng báo động (% ánh sáng): dưới ngưỡng này -> chớp tất cả đèn
-    send_interval      chu kỳ ESP32 lấy cấu hình và gửi dữ liệu (giây)
+Bộ cấu hình (lưu trong pc/data/bai2_config_lux.json để không mất khi tắt server):
+    warning_threshold  ngưỡng cảnh báo (lux): dưới ngưỡng này bắt đầu cần bật đèn
+    alarm_threshold    ngưỡng báo động (lux): dưới ngưỡng này -> chớp tất cả đèn
+    send_interval      chu kỳ ESP lấy cấu hình và gửi dữ liệu (giây)
     version            số phiên bản cấu hình, server tự tăng
 
 Chạy:  python bai2_server.py            (mặc định cổng 5000)
@@ -28,9 +28,11 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 
-DATA_FILE = Path(__file__).resolve().parent / "data" / "bai2_config.json"
+# Cảm biến GY-302 (BH1750) đo ánh sáng theo lux: 1..65535 lx
+MAX_LUX = 65535
+DATA_FILE = Path(__file__).resolve().parent / "data" / "bai2_config_lux.json"
 DEFAULT_CONFIG = {
-    "warning_threshold": 60,
+    "warning_threshold": 200,
     "alarm_threshold": 20,
     "send_interval": 5,
     "version": 1,
@@ -75,8 +77,8 @@ def validate(new_config):
         value = new_config[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return f"'{key}' phải là số"
-    if not 0 <= new_config["alarm_threshold"] < new_config["warning_threshold"] <= 100:
-        return "Cần thỏa 0 <= alarm_threshold < warning_threshold <= 100 (đơn vị %)"
+    if not 0 <= new_config["alarm_threshold"] < new_config["warning_threshold"] <= MAX_LUX:
+        return f"Cần thỏa 0 <= alarm_threshold < warning_threshold <= {MAX_LUX} (đơn vị lux)"
     if not 1 <= new_config["send_interval"] <= 3600:
         return "send_interval phải nằm trong khoảng 1..3600 giây"
     return None
@@ -117,7 +119,7 @@ def put_config():
         data = dict(config)
 
     print(f"[{now()}] PUT  /api/config  từ {request.remote_addr} -> cấu hình mới v{data['version']}: "
-          f"cảnh báo {data['warning_threshold']}%, báo động {data['alarm_threshold']}%, "
+          f"cảnh báo {data['warning_threshold']} lx, báo động {data['alarm_threshold']} lx, "
           f"chu kỳ {data['send_interval']}s")
     return reply(False, f"Cập nhật cấu hình thành công, phiên bản v{data['version']}", data)
 
@@ -136,15 +138,19 @@ def put_sensor():
         current_version = config["version"]
 
     distance = data.get("distance")
+    light = data.get("light")
+    light_text = "lỗi cảm biến" if light is None else f"{light} lx"
     distance_text = "ngoài vùng đo" if distance is None else f"{distance} cm"
     person_text = "CÓ người" if data.get("person") else "không có người"
-    print(f"[{now()}] PUT  /api/sensor  từ {request.remote_addr} | ánh sáng {data.get('light')}% | "
+    print(f"[{now()}] PUT  /api/sensor  từ {request.remote_addr} | ánh sáng {light_text} | "
           f"khoảng cách {distance_text} | {person_text} | đèn sáng: {data.get('lamps')} | "
-          f"chế độ {data.get('mode')} | cấu hình ESP32 v{data.get('config_version')}")
+          f"chế độ {data.get('mode')} | cấu hình ESP v{data.get('config_version')}")
+    if data.get("mode") == "SENSOR_ERROR":
+        print(f"[{now()}] >>> ESP không đọc được cảm biến GY-302: kiểm tra dây SDA/SCL và nguồn 3V3")
     if data.get("mode") == "OVER_THRESHOLD":
-        print(f"[{now()}] >>> Ánh sáng vượt ngưỡng báo động, ESP32 đang chớp đèn: hãy cập nhật ngưỡng mới!")
+        print(f"[{now()}] >>> Ánh sáng vượt ngưỡng báo động, ESP đang chớp đèn: hãy cập nhật ngưỡng mới!")
     if data.get("config_version") != current_version:
-        print(f"[{now()}] >>> ESP32 đang dùng v{data.get('config_version')}, server có v{current_version} "
+        print(f"[{now()}] >>> ESP đang dùng v{data.get('config_version')}, server có v{current_version} "
               f"(sẽ cập nhật ở chu kỳ sau)")
     return reply(False, "Server đã nhận dữ liệu", {"config_version": current_version})
 
@@ -154,7 +160,7 @@ def get_sensor():
     with lock:
         data = last_sensor
     if data is None:
-        return reply(True, "Chưa nhận được dữ liệu nào từ ESP32", None, 404)
+        return reply(True, "Chưa nhận được dữ liệu nào từ ESP", None, 404)
     return reply(False, "Bản tin cảm biến gần nhất", data)
 
 

@@ -84,6 +84,7 @@ LAB3/
    | :--- | :--- | :--- |
    | LiquidCrystal I2C | Frank de Brabander | Bài 1, Bài 5 (đã có từ LAB 1/LAB 2) |
    | ArduinoJson (bản **7.x**) | Benoit Blanchon | Bài 2, Bài 5 |
+   | BH1750 | Christopher Laws | Bài 2 (cảm biến ánh sáng GY-302) |
    | PubSubClient | Nick O'Leary | Bài 4, Bài 5 |
    | DHT sensor library + Adafruit Unified Sensor | Adafruit | Bài 5 |
 
@@ -333,11 +334,11 @@ Mã nguồn nằm tại: [Bai1/Bai1.ino](Bai1/Bai1.ino).
 ## BÀI 2: CẤU HÌNH TỪ XA ĐÈN ĐƯỜNG THÔNG MINH
 
 ### 1. Yêu cầu Bài 2
-Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến khoảng cách và 03 đèn LED:
+Kịch bản gồm 01 Wemos, 01 cảm biến ánh sáng, 01 cảm biến khoảng cách và 03 đèn LED:
 - **Máy tính là Server**, xây dựng RESTful API (chủ yếu dùng **GET** và **PUT**). Server lưu một bộ cấu hình gồm:
   ngưỡng cảnh báo, ngưỡng báo động, chu kỳ gửi dữ liệu và số phiên bản cấu hình.
 - Người dùng đổi cấu hình bằng `PUT /api/config` qua **Postman**, mỗi lần đổi thì **số phiên bản tăng thêm 1**.
-- **Wemos D1 là HTTP Client**: theo chu kỳ đã cấu hình, gửi `GET` lấy cấu hình về và áp dụng cho thiết bị.
+- **Wemos là HTTP Client**: theo chu kỳ đã cấu hình, gửi `GET` lấy cấu hình về và áp dụng cho thiết bị.
 - Có người tiếp cận (theo cảm biến khoảng cách) thì bật số đèn đủ để chiếu sáng; không có người thì tắt hết đèn.
 - Số đèn sáng tính theo ngưỡng: **cường độ ánh sáng càng gần ngưỡng thì càng nhiều đèn sáng**.
 - Ánh sáng **vượt ngưỡng** thì **liên tục chớp tắt tất cả đèn** để báo người dùng cần cập nhật ngưỡng mới.
@@ -347,8 +348,8 @@ Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến kho�
   ```
 
 > **Cách hiểu đề:** đề ghi "ngưỡng **nhiệt độ** cảnh báo / báo động" nhưng kịch bản không có cảm biến nhiệt độ, còn đèn lại
-> điều khiển theo ngưỡng **ánh sáng**. Nhóm hiểu hai ngưỡng này là **ngưỡng ánh sáng** (đơn vị %). Trường `temperature`
-> vẫn giữ trong JSON cho đúng định dạng, nhưng luôn có giá trị `null`.
+> điều khiển theo ngưỡng **ánh sáng**. Nhóm hiểu hai ngưỡng này là **ngưỡng ánh sáng**, đơn vị **lux** (đo bằng cảm biến
+> GY-302). Trường `temperature` vẫn giữ trong JSON cho đúng định dạng, nhưng luôn có giá trị `null`.
 
 ---
 
@@ -358,7 +359,7 @@ Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến kho�
 | Linh kiện | Số lượng | Ghi chú |
 | :--- | :---: | :--- |
 | Wemos D1 (ESP8266) | 1 | HTTP Client |
-| Module cảm biến ánh sáng quang trở (4 chân, có AO) | 1 | Đọc analog qua A0 |
+| Cảm biến ánh sáng **GY-302 (BH1750)** | 1 | Giao tiếp **I2C**, đo trực tiếp ra **lux** (1 – 65535 lx) |
 | Cảm biến siêu âm HC-SR04 | 1 | Phát hiện người tiếp cận |
 | Đèn LED 5mm + điện trở $220\,\Omega$ | 3 | 3 đèn đường |
 | Điện trở $1\,k\Omega$ + $2\,k\Omega$ | 1 + 1 | Chia áp chân ECHO từ 5V xuống ~3,3V |
@@ -367,24 +368,42 @@ Kịch bản gồm 01 Wemos D1, 01 cảm biến ánh sáng, 01 cảm biến kho�
 #### Bảng kết nối chân:
 | Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
 | :--- | :--- | :---: | :---: | :---: |
-| **Module quang trở** | VCC | 3V3 | 3V3 | 3V3 |
+| **GY-302 (BH1750)** | VCC | 3V3 | 3V3 | 3V3 |
 | | GND | GND | GND | GND |
-| | AO | A0 | A0 | A0 |
+| | SDA | GPIO4 | D4 (hoặc chân **SDA** cạnh AREF) | D2 |
+| | SCL | GPIO5 | D3 (hoặc chân **SCL** cạnh AREF) | D1 |
+| | ADDR | Để trống | | |
 | **HC-SR04** | VCC | 5V | 5V | 5V |
 | | GND | GND | GND | GND |
 | | TRIG | GPIO14 | D5 | D5 |
 | | ECHO (qua cầu chia áp) | GPIO12 | D6 | D6 |
-| **LED 1** | Anode (qua trở $220\,\Omega$) | GPIO5 | D3 | D1 |
-| **LED 2** | Anode (qua trở $220\,\Omega$) | GPIO4 | D4 | D2 |
-| **LED 3** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
+| **LED 1** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
+| **LED 2** | Anode (qua trở $220\,\Omega$) | GPIO16 | D2 | D0 |
+| **LED 3** | Anode (qua trở $220\,\Omega$) | GPIO15 | D10 | D8 |
 | Cathode 3 LED | | GND | GND | GND |
+
+> Trên board in sẵn số GPIO (ví dụ board Maker *arduino.esp8266.vn*), cứ cắm theo cột **GPIO**.
 
 **Cầu chia áp cho ECHO:** `ECHO ── 1kΩ ──┬── GPIO12`, rồi từ điểm nối `┴── 2kΩ ── GND`.
 HC-SR04 xuất xung 5V, chân ESP8266 chỉ chịu 3,3V. Cầu chia cho ra $5 \times \frac{2}{1+2} \approx 3{,}3\text{ V}$.
 
-> Module quang trở cấp **3V3** để điện áp AO không vượt quá dải đo của A0. Với module phổ biến, **càng tối thì AO
-> càng cao**. Code đổi sang "% ánh sáng" (100% = rất sáng). Nếu che cảm biến mà % lại tăng, đổi
-> `LDR_HIGHER_IS_DARKER = false` trong `Bai2.ino`.
+> **GY-302 (BH1750):**
+> - Module có 5 chân: VCC, GND, SCL, SDA, **ADDR**. Để trống ADDR (hoặc nối GND) thì địa chỉ I2C là **0x23**,
+>   là địa chỉ mặc định trong code. Nối ADDR lên VCC thì địa chỉ thành 0x5C.
+> - Cấp **3V3**. Module chạy được cả 5V, nhưng 3V3 giữ mức tín hiệu SDA/SCL an toàn cho chân ESP8266.
+> - Cảm biến đo ra **lux**, càng sáng giá trị càng lớn, không cần hiệu chỉnh hay lật chiều như module quang trở.
+> - Mức tham khảo:
+>
+>   | Môi trường | Mức sáng |
+>   | :--- | :--- |
+>   | Che kín cảm biến | ~0–5 lx |
+>   | Phòng tối | ~10–50 lx |
+>   | Phòng học bật đèn | ~200–500 lx |
+>   | Đèn flash điện thoại chiếu sát | vài nghìn lx |
+>
+> **Vì sao 3 LED nằm ở GPIO13, 16, 15?** GY-302 dùng I2C mặc định GPIO4 (SDA) và GPIO5 (SCL), trùng 2 chân LED cũ nên
+> LED được dời đi. GPIO15 bắt buộc ở mức LOW khi khởi động; LED nối từ chân này về GND không kéo chân lên, nên board
+> vẫn khởi động bình thường.
 
 ---
 
@@ -402,55 +421,57 @@ Mã nguồn: [pc/bai2_server.py](../pc/bai2_server.py) (Flask). Mọi phản h�
 #### Bộ cấu hình:
 | Trường | Mặc định | Ý nghĩa |
 | :--- | :---: | :--- |
-| `warning_threshold` | 60 | **Ngưỡng cảnh báo** (% ánh sáng): dưới ngưỡng này trời bắt đầu tối, cần bật đèn khi có người |
-| `alarm_threshold` | 20 | **Ngưỡng báo động** (% ánh sáng): dưới ngưỡng này là vượt ngưỡng, chớp tất cả đèn |
+| `warning_threshold` | 200 | **Ngưỡng cảnh báo** (lux): dưới ngưỡng này trời bắt đầu tối, cần bật đèn khi có người |
+| `alarm_threshold` | 20 | **Ngưỡng báo động** (lux): dưới ngưỡng này là vượt ngưỡng, chớp tất cả đèn |
 | `send_interval` | 5 | Chu kỳ (giây) Wemos lấy cấu hình và gửi dữ liệu |
 | `version` | 1 | Số phiên bản, **chỉ server được tăng**, người dùng không sửa được |
 
-Server kiểm tra $0 \le \text{alarm} < \text{warning} \le 100$ và $1 \le \text{send\_interval} \le 3600$.
-Sai điều kiện hoặc có trường lạ thì trả về `"error": true` kèm mã **400**. Cấu hình được lưu vào
-`pc/data/bai2_config.json`, nên tắt và bật lại server không mất phiên bản.
+Server kiểm tra $0 \le \text{alarm} < \text{warning} \le 65535$ (giới hạn đo của BH1750) và
+$1 \le \text{send\_interval} \le 3600$. Sai điều kiện hoặc có trường lạ thì trả về `"error": true` kèm mã **400**.
+Cấu hình được lưu vào `pc/data/bai2_config_lux.json`, nên tắt và bật lại server không mất phiên bản.
 
 **Ví dụ đổi cấu hình bằng Postman:** `PUT http://<IP máy tính>:5000/api/config`, Body → raw → JSON:
 ```json
-{ "warning_threshold": 70, "send_interval": 3 }
+{ "warning_threshold": 300, "alarm_threshold": 30 }
 ```
 Phản hồi:
 ```json
 { "error": false, "message": "Cập nhật cấu hình thành công, phiên bản v2",
-  "data": { "warning_threshold": 70, "alarm_threshold": 20, "send_interval": 3, "version": 2 } }
+  "data": { "warning_threshold": 300, "alarm_threshold": 30, "send_interval": 5, "version": 2 } }
 ```
 
 **Bản tin Wemos gửi lên (`PUT /api/sensor`):**
 ```json
 { "error": false, "message": "Wemos D1 sensor report",
-  "data": { "temperature": null, "light": 45, "distance": 30.2, "person": true,
+  "data": { "temperature": null, "light": 152.5, "distance": 30.2, "person": true,
             "lamps": 2, "mode": "LIGHTING", "config_version": 2 } }
 ```
+`light` là lux. Nếu không đọc được GY-302 thì `light` = `null` và `mode` = `SENSOR_ERROR`.
 
-**Command line của server:**
+**Command line của server** (đã chạy thử):
 ```
-[08:06:24] GET  /api/config  từ 172.31.9.50 -> trả về phiên bản v2
-[08:06:24] PUT  /api/sensor  từ 172.31.9.50 | ánh sáng 45% | khoảng cách 30.2 cm | CÓ người | đèn sáng: 2 | chế độ LIGHTING | cấu hình Wemos v2
+[10:42:47] PUT  /api/config  từ 127.0.0.1 -> cấu hình mới v2: cảnh báo 300 lx, báo động 30 lx, chu kỳ 5s
+[10:42:47] PUT  /api/sensor  từ 172.31.9.50 | ánh sáng 152.5 lx | khoảng cách 30.2 cm | CÓ người | đèn sáng: 2 | chế độ LIGHTING | cấu hình ESP v2
 ```
 
 ---
 
 ### 4. Thuật toán điều khiển đèn (trên Wemos)
 
-Gọi $L$ là % ánh sáng, $W$ là ngưỡng cảnh báo, $A$ là ngưỡng báo động ($A < W$).
+Gọi $L$ là độ sáng đo được (lux), $W$ là ngưỡng cảnh báo, $A$ là ngưỡng báo động ($A < W$).
 
 | Điều kiện | Chế độ (`mode`) | Đèn |
 | :--- | :--- | :--- |
+| Không đọc được GY-302 | `SENSOR_ERROR` | Tắt hết (không đoán bừa), server in cảnh báo kiểm tra dây |
 | $L < A$ (vượt ngưỡng báo động) | `OVER_THRESHOLD` | **Chớp tắt cả 3 đèn** (chu kỳ 0,3 s), có người hay không đều chớp |
 | Có người và $L \ge W$ (trời đủ sáng) | `LIGHTING` | 0 đèn |
 | Có người và $A \le L < W$ | `LIGHTING` | $n = \left\lceil 3 \times \dfrac{W - L}{W - A} \right\rceil$ (1 → 3 đèn) |
 | Không có người | `NO_PERSON` | Tắt hết |
 
 Chia đoạn $[A, W)$ thành 3 phần bằng nhau: $L$ càng gần $A$ thì càng nhiều đèn.
-Ví dụ với $W = 60\%$, $A = 20\%$:
+Ví dụ với $W = 200$ lx, $A = 20$ lx (các mốc chia là 140 lx và 80 lx):
 
-| $L$ | 65% | 55% | 40% | 25% | 15% |
+| $L$ (lux) | 350 | 160 | 100 | 40 | 10 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Số đèn (có người) | 0 | 1 | 2 | 3 | chớp cả 3 |
 
@@ -458,7 +479,8 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 **giữ thêm 2 giây** sau lần cuối thấy người, để đèn không chập chờn do cảm biến đo nhiễu.
 
 **Luồng chạy của Wemos (non-blocking):**
-- Mỗi **100 ms**: đọc ánh sáng (trung bình 4 mẫu) và khoảng cách, rồi tính chế độ đèn.
+- Mỗi **100 ms**: đọc lux từ BH1750 (chế độ đo liên tục độ phân giải cao, ~120 ms một lần đo) và khoảng cách,
+  rồi tính chế độ đèn.
 - Mỗi **`send_interval` giây**:
   1. `GET /api/config`. Nếu `version` khác bản đang dùng thì áp dụng ngay (ngưỡng và chu kỳ mới).
   2. `PUT /api/sensor` gửi dữ liệu kèm `config_version` đang dùng.
@@ -467,23 +489,28 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 ---
 
 ### 5. Giải thích mã nguồn Bài 2
-- **[Bai2/Bai2.ino](Bai2/Bai2.ino)** dùng `ESP8266HTTPClient` để gửi request và **ArduinoJson 7** để đọc và tạo JSON.
+- **[Bai2/Bai2.ino](Bai2/Bai2.ino)** dùng `HTTPClient` để gửi request, **ArduinoJson 7** để đọc và tạo JSON, và thư viện
+  **BH1750** để đọc GY-302.
+  - `setup()`: `Wire.begin(SDA, SCL)` rồi `lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)`.
+    Không tìm thấy cảm biến thì in lỗi ra Serial.
+  - `readLight()`: gọi `lightMeter.readLightLevel()`. Kết quả âm nghĩa là lỗi I2C, khi đó đặt `lightValid = false`.
   - `fetchConfig()`: gửi `GET`, đọc `data.version`. Chỉ khi phiên bản đổi mới cập nhật `warningThreshold`,
-    `alarmThreshold`, `sendIntervalMs` và in ra Serial.
+    `alarmThreshold` (kiểu `float`, lux), `sendIntervalMs` và in ra Serial.
   - `sendSensorData()`: đóng gói JSON đúng định dạng `{error, message, data}` rồi gửi `PUT`, kèm header
     `Content-Type: application/json`.
   - `lampsForLight()`: tính số đèn theo công thức ở mục 4. `updateBlink()` lo việc chớp đèn bằng `millis()`.
   - Timeout HTTP là 2 giây, nên server tắt thì Wemos chỉ khựng tối đa 2 s rồi chạy tiếp với cấu hình cũ.
 - **[pc/bai2_server.py](../pc/bai2_server.py)**: Flask chạy `host=0.0.0.0` để máy khác trong mạng gọi được. Biến `lock`
-  đảm bảo hai request đổi cấu hình cùng lúc không làm tăng sai số phiên bản. Server còn báo khi Wemos đang dùng phiên
-  bản cũ hơn server (Wemos sẽ cập nhật ở chu kỳ sau).
+  đảm bảo hai request đổi cấu hình cùng lúc không làm tăng sai số phiên bản. Server còn báo khi thiết bị đang dùng
+  phiên bản cũ hơn server, hoặc khi thiết bị báo lỗi cảm biến.
 
 ---
 
 ### 6. Chạy thử & Gợi ý ảnh chụp cho báo cáo
 
 1. **Cài thư viện:**
-   - **Arduino IDE:** **Library Manager** → cài **ArduinoJson** (Benoit Blanchon), phiên bản **7.x**.
+   - **Arduino IDE:** **Library Manager** → cài **ArduinoJson** (Benoit Blanchon, bản **7.x**) và **BH1750**
+     (Christopher Laws).
    - **Python:** trong thư mục `LAB3/pc` chạy:
      ```bash
      pip install -r requirements.txt
@@ -493,18 +520,20 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
    python bai2_server.py
    ```
    Server in ra địa chỉ, ví dụ `Server chạy tại http://172.31.9.36:5000`.
-   Lần đầu chạy, Windows hỏi quyền tường lửa: chọn **Allow access**. Nếu Wemos vẫn không gọi được, xem mục 7.
+   Lần đầu chạy, Windows hỏi quyền tường lửa: chọn **Allow access**. Nếu thiết bị vẫn không gọi được, xem mục 7.
 3. Sửa `SERVER_URL` trong `Bai2.ino` thành địa chỉ trên, rồi nạp code. Mở Serial Monitor ở **115200 baud**.
 4. **Postman:** **Import** file [pc/Lab03_Bai2.postman_collection.json](../pc/Lab03_Bai2.postman_collection.json), sửa
    biến `base_url`, rồi gửi lần lượt các request `PUT`. Quan sát:
    - phản hồi Postman có `version` tăng 1;
    - sau tối đa một chu kỳ, Serial Monitor in `[CONFIG] Ap dung cau hinh v...`;
-   - command line của server in `cấu hình Wemos v...` khớp phiên bản mới.
+   - command line của server in `cấu hình ESP v...` khớp phiên bản mới.
 5. **Thử phần cứng:**
-   - Đưa tay lại gần HC-SR04 (< 50 cm) rồi che dần cảm biến ánh sáng: số đèn tăng 1 → 3.
-   - Che kín cảm biến ánh sáng: cả 3 đèn chớp liên tục.
-   - Dùng Postman hạ `alarm_threshold` xuống thấp hơn % ánh sáng hiện tại: đèn hết chớp, chứng minh cấu hình từ xa
-     có tác dụng.
+   - Xem lux hiện tại của phòng trong log server, rồi đặt ngưỡng phù hợp. Ví dụ phòng đo được 300 lx thì để
+     `warning_threshold` = 200, `alarm_threshold` = 20.
+   - Đưa tay lại gần HC-SR04 (< 50 cm) rồi che dần GY-302: số đèn tăng 1 → 3.
+   - Che kín GY-302 (< 20 lx): cả 3 đèn chớp liên tục.
+   - Dùng Postman hạ `alarm_threshold` xuống thấp hơn lux hiện tại (ví dụ 2): đèn hết chớp, chứng minh cấu hình
+     từ xa có tác dụng.
 
 **Ảnh nên chụp cho báo cáo:**
 - Postman: `GET /api/config`, `PUT /api/config` thành công (version tăng) và `PUT` sai (`"error": true`, mã 400).
@@ -519,9 +548,10 @@ Ví dụ với $W = 60\%$, $A = 20\%$:
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 | :--- | :--- |
 | Serial báo `GET /api/config loi: connection refused` hoặc `read Timeout` | Sai `SERVER_URL`; máy tính và Wemos khác mạng; hoặc **Windows Firewall** chặn cổng 5000. Mở *Windows Defender Firewall → Allow an app* và tick cả **Private** lẫn **Public** cho `python.exe`. Mạng WiFi của lab thường được Windows xếp vào loại **Public** |
-| Postman báo `"error": true` khi `PUT` | Đọc `message`: ngưỡng báo động phải nhỏ hơn ngưỡng cảnh báo, giá trị phải là số, không gửi trường lạ |
+| Postman báo `"error": true` khi `PUT` | Đọc `message`: ngưỡng báo động phải nhỏ hơn ngưỡng cảnh báo, giá trị phải là số (lux, tối đa 65535), không gửi trường lạ |
+| Serial in `[BH1750] Khong tim thay GY-302`, chế độ `SENSOR_ERROR` | Kiểm tra SDA/SCL đúng chân (SDA→GPIO4, SCL→GPIO5), không bị đảo; VCC 3V3, GND; chân ADDR để trống |
+| Lux luôn rất thấp dù phòng sáng | Mặt cảm biến (chip nhỏ màu đen trên module) bị che hoặc úp xuống; xoay module cho mặt cảm biến hướng lên |
 | Khoảng cách luôn `null` | Kiểm tra cầu chia áp ECHO, cấp **5V** cho HC-SR04, đúng chân TRIG/ECHO |
-| % ánh sáng tăng khi che cảm biến | Đổi `LDR_HIGHER_IS_DARKER = false` |
 | Đèn chập chờn khi đứng yên | Tăng `PERSON_HOLD_MS` hoặc giảm `PERSON_DISTANCE_CM` |
 
 ---
