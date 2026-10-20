@@ -24,6 +24,7 @@
 8. [PHẦN C.2: Chuẩn bị Raspberry Pi (SSH, VNC)](#phần-c2-chuẩn-bị-raspberry-pi-ssh-vnc)
 9. [Cài đặt MQTT Broker Mosquitto trên Raspberry Pi](#cài-đặt-mqtt-broker-mosquitto-trên-raspberry-pi)
 10. [BÀI 3: Kiểm tra bộ lọc topic MQTT](#bài-3-kiểm-tra-bộ-lọc-topic-mqtt)
+11. [BÀI 4: Điều khiển LED qua MQTT](#bài-4-điều-khiển-led-qua-mqtt)
 
 ---
 
@@ -36,7 +37,7 @@
 | Bài 1 | HTTP (Wemos là server) | Trò chơi ghi nhớ dãy số: LED 7 đoạn + LCD + web | ✅ |
 | Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
 | Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ✅ |
-| Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ⏳ |
+| Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ✅ |
 | Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ⏳ |
 
 ---
@@ -58,6 +59,9 @@ LAB3/
 ├── Bai2/
 │   └── Bai2.ino                                 # Bài 2: Wemos (HTTP client) điều khiển đèn đường
 │
+├── Bai4/
+│   └── Bai4.ino                                 # Bài 4: Wemos subscribe topic điều khiển LED
+│
 ├── raspberry/
 │   └── lab3.conf                                # Cấu hình Mosquitto (MQTT Broker) cho Raspberry Pi
 │
@@ -65,7 +69,8 @@ LAB3/
     ├── requirements.txt                         # Thư viện Python cần cài
     ├── bai2_server.py                           # Bài 2: RESTful API lưu cấu hình
     ├── Lab03_Bai2.postman_collection.json       # Bài 2: các request mẫu cho Postman
-    └── bai3_topic_filter_test.py                # Bài 3: script đối chiếu kết quả bộ lọc topic
+    ├── bai3_topic_filter_test.py                # Bài 3: script đối chiếu kết quả bộ lọc topic
+    └── bai4_led_control.py                      # Bài 4: publish trạng thái LED
 ```
 
 ---
@@ -653,3 +658,80 @@ Topic được chia cấp bằng dấu `/`. Broker so khớp bộ lọc với to
 
 **Ảnh nên chụp cho báo cáo:** SSH vào Pi với kết quả `systemctl status mosquitto` và `ss -ltnp | grep 1883`;
 màn hình MQTTX của Client 1 ứng với **mỗi** bộ lọc (5 ảnh); màn hình Client 2 lúc publish.
+
+---
+
+## BÀI 4: ĐIỀU KHIỂN LED QUA MQTT
+
+### 1. Yêu cầu Bài 4
+Kịch bản gồm 01 Wemos D1, 01 Raspberry Pi, 01 máy tính cá nhân và 01 đèn LED:
+- **Raspberry Pi** đóng vai trò **MQTT Broker**.
+- Triển khai MQTT Client trên **Wemos D1** và **máy tính**.
+- Máy tính **publish** trạng thái đèn vào topic `cq/NT532.R12/nhom10/led`.
+- Wemos **subscribe** topic đó để lắng nghe trạng thái, từ đó bật hoặc tắt LED.
+
+```
+ [Máy tính]  ── publish "ON"/"OFF" ──►  [Raspberry Pi: Mosquitto]  ── chuyển tiếp ──►  [Wemos D1] ──► LED
+  bai4_led_control.py                    topic cq/NT532.R12/nhom10/led                 subscribe
+```
+
+### 2. Linh kiện & Sơ đồ nối dây
+| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
+| :--- | :--- | :---: | :---: | :---: |
+| **LED** | Anode (qua trở $220\,\Omega$) | GPIO14 | D5 | D5 |
+| | Cathode | GND | GND | GND |
+
+### 3. Thiết kế bản tin
+| Thành phần | Giá trị |
+| :--- | :--- |
+| Topic | `cq/NT532.R12/nhom10/led` |
+| Payload | `ON` hoặc `OFF` (Wemos chấp nhận cả `on`/`off`, `1`/`0`; giá trị khác bị bỏ qua) |
+| QoS | 1: broker đảm bảo bản tin tới nơi **ít nhất một lần** |
+| Retain | `true`: broker giữ lại trạng thái cuối |
+
+**Vì sao dùng retain?** Nếu Wemos khởi động lại hoặc mất WiFi rồi kết nối lại, ngay khi subscribe nó nhận được
+trạng thái **gần nhất** từ broker, nên LED luôn khớp với lệnh cuối cùng của người dùng. Không có retain thì Wemos phải
+chờ lần publish kế tiếp.
+
+### 4. Giải thích mã nguồn Bài 4
+- **[Bai4/Bai4.ino](Bai4/Bai4.ino)** dùng thư viện **PubSubClient**:
+  - `mqtt.setServer()` khai báo IP Raspberry Pi; `mqtt.setCallback(onMqttMessage)` khai báo hàm xử lý bản tin đến.
+  - `connectMqtt()`: kết nối với Client ID riêng (`nhom10-bai4-wemos-<chipId>`, tránh trùng với nhóm khác),
+    rồi `subscribe(TOPIC_LED, 1)`.
+  - `onMqttMessage()`: ghép payload thành chuỗi, đổi sang chữ hoa, rồi `ON` → `digitalWrite(HIGH)`, `OFF` → `LOW`.
+  - `loop()` gọi `mqtt.loop()` để nhận bản tin. Mất kết nối thì cứ 3 giây thử lại một lần, không dùng `delay()` chặn.
+- **[pc/bai4_led_control.py](pc/bai4_led_control.py)** dùng **paho-mqtt 2.x**: gõ `on`/`off`/`t` để publish,
+  hoặc tham số `--state on` để gửi một lần rồi thoát. Mỗi lần publish đều chờ broker xác nhận rồi in `[OK]`.
+
+### 5. Chạy thử & Gợi ý ảnh chụp cho báo cáo
+1. Đảm bảo broker trên Raspberry Pi đã chạy và mở cổng cho mạng
+   (xem [Cài đặt MQTT Broker](#cài-đặt-mqtt-broker-mosquitto-trên-raspberry-pi)).
+2. **Arduino IDE:** cài thư viện **PubSubClient** (Nick O'Leary). Sửa `MQTT_BROKER` trong `Bai4.ino` thành IP của Pi,
+   nạp code, mở Serial Monitor ở **115200 baud**. Thấy `Da subscribe: cq/NT532.R12/nhom10/led` là sẵn sàng.
+3. **Máy tính** (thư mục `LAB3/pc`, đã `pip install -r requirements.txt`):
+   ```bash
+   python bai4_led_control.py --broker <IP Raspberry Pi>
+   ```
+   Gõ `on`, `off`, `t` và quan sát LED.
+4. Nên mở thêm một cửa sổ SSH vào Pi để thấy bản tin đi qua broker:
+   ```bash
+   mosquitto_sub -h localhost -t "cq/NT532.R12/nhom10/led" -v
+   ```
+5. **Thử retain:** gõ `on`, rút điện Wemos rồi cắm lại. Sau khi kết nối, LED tự sáng mà không cần gửi lệnh mới.
+
+**Ảnh nên chụp cho báo cáo:**
+- Terminal máy tính đang publish.
+- Serial Monitor của Wemos in `[MQTT] cq/NT532.R12/nhom10/led -> ON => BAT den`.
+- `mosquitto_sub` trên Pi.
+- LED sáng và tắt tương ứng.
+- Kết quả thử retain.
+- Có thể dùng MQTTX publish thay cho script để minh họa thêm.
+
+### 6. Lỗi thường gặp
+| Hiện tượng | Nguyên nhân / Cách xử lý |
+| :--- | :--- |
+| Serial báo `that bai, rc = -2` liên tục | Wemos không tới được broker: sai `MQTT_BROKER`, Pi khác mạng, hoặc Mosquitto chỉ nghe `127.0.0.1` (thiếu file `lab3.conf`) |
+| `rc = 5` (not authorized) | Broker đang yêu cầu tài khoản: kiểm tra dòng `allow_anonymous true` |
+| Script máy tính báo `Không kết nối được broker` | Như trên; thử `ping <IP Pi>` từ máy tính |
+| LED sáng ngược (gửi ON thì tắt) | Nối LED ngược kiểu "kéo lên 3V3": đổi lại Anode vào GPIO14, Cathode xuống GND |
+| Hai nhóm điều khiển lẫn đèn của nhau | Client ID hoặc topic trùng nhau: giữ đúng tiền tố `cq/NT532.R12/nhom10` |
