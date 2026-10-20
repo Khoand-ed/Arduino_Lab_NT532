@@ -25,6 +25,7 @@
 9. [Cài đặt MQTT Broker Mosquitto trên Raspberry Pi](#cài-đặt-mqtt-broker-mosquitto-trên-raspberry-pi)
 10. [BÀI 3: Kiểm tra bộ lọc topic MQTT](#bài-3-kiểm-tra-bộ-lọc-topic-mqtt)
 11. [BÀI 4: Điều khiển LED qua MQTT](#bài-4-điều-khiển-led-qua-mqtt)
+12. [BÀI 5: Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức](#bài-5-giám-sát-nhiệt-độ-độ-ẩm-với-cảnh-báo-nhiều-mức)
 
 ---
 
@@ -38,7 +39,7 @@
 | Bài 2 | HTTP (Wemos là client) | Cấu hình từ xa đèn đường thông minh | ✅ |
 | Bài 3 | MQTT | Thử các bộ lọc topic `+` / `#` bằng MQTT client | ✅ |
 | Bài 4 | MQTT | Điều khiển LED trên Wemos từ máy tính qua broker Raspberry Pi | ✅ |
-| Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ⏳ |
+| Bài 5 | MQTT | Giám sát nhiệt độ, độ ẩm với cảnh báo nhiều mức | ✅ |
 
 ---
 
@@ -62,6 +63,9 @@ LAB3/
 ├── Bai4/
 │   └── Bai4.ino                                 # Bài 4: Wemos subscribe topic điều khiển LED
 │
+├── Bai5/
+│   └── Bai5.ino                                 # Bài 5: Wemos gửi DHT11, hiển thị mức cảnh báo
+│
 ├── raspberry/
 │   └── lab3.conf                                # Cấu hình Mosquitto (MQTT Broker) cho Raspberry Pi
 │
@@ -70,7 +74,8 @@ LAB3/
     ├── bai2_server.py                           # Bài 2: RESTful API lưu cấu hình
     ├── Lab03_Bai2.postman_collection.json       # Bài 2: các request mẫu cho Postman
     ├── bai3_topic_filter_test.py                # Bài 3: script đối chiếu kết quả bộ lọc topic
-    └── bai4_led_control.py                      # Bài 4: publish trạng thái LED
+    ├── bai4_led_control.py                      # Bài 4: publish trạng thái LED
+    └── bai5_dht_monitor.py                      # Bài 5: đánh giá 3 mức và publish cảnh báo
 ```
 
 ---
@@ -83,7 +88,16 @@ LAB3/
    - **Tools → Board → Boards Manager...**, tìm `esp8266` và nhấn **Install** (đã thử với bản **3.1.2**).
 2. **Chọn board:** **Tools → Board → ESP8266 Boards → LOLIN(WEMOS) D1 R2 & mini**.
 3. **Chọn cổng:** **Tools → Port** → cổng COM của Wemos. Nếu không thấy cổng COM, cài driver **CH340**.
-4. **Thư viện:** `LiquidCrystal_I2C` (Frank de Brabander), đã có sẵn từ LAB 1/LAB 2.
+4. **Thư viện** (Sketch → Include Library → Manage Libraries...):
+
+   | Thư viện | Tác giả | Dùng cho |
+   | :--- | :--- | :--- |
+   | LiquidCrystal I2C | Frank de Brabander | Bài 1, Bài 5 (đã có từ LAB 1/LAB 2) |
+   | ArduinoJson (bản **7.x**) | Benoit Blanchon | Bài 2, Bài 5 |
+   | PubSubClient | Nick O'Leary | Bài 4, Bài 5 |
+   | DHT sensor library + Adafruit Unified Sensor | Adafruit | Bài 5 |
+
+   Phía máy tính cần Python 3. Trong thư mục `LAB3/pc` chạy `pip install -r requirements.txt` (Flask, paho-mqtt).
    Khi biên dịch, IDE sẽ báo *"claims to run on avr architecture"*. Cảnh báo này vô hại, thư viện vẫn chạy tốt trên ESP8266.
 5. **WiFi:** ESP8266 **chỉ hỗ trợ WiFi 2.4 GHz**. Máy tính/điện thoại mở trang web phải **cùng mạng** với Wemos.
    Tên và mật khẩu WiFi khai báo ở đầu mỗi file `.ino` (mặc định theo tài liệu: `UiTiOt-E3.1` / `UiTiOtAP`).
@@ -735,3 +749,156 @@ chờ lần publish kế tiếp.
 | Script máy tính báo `Không kết nối được broker` | Như trên; thử `ping <IP Pi>` từ máy tính |
 | LED sáng ngược (gửi ON thì tắt) | Nối LED ngược kiểu "kéo lên 3V3": đổi lại Anode vào GPIO14, Cathode xuống GND |
 | Hai nhóm điều khiển lẫn đèn của nhau | Client ID hoặc topic trùng nhau: giữ đúng tiền tố `cq/NT532.R12/nhom10` |
+
+---
+
+## BÀI 5: GIÁM SÁT NHIỆT ĐỘ, ĐỘ ẨM VỚI CẢNH BÁO NHIỀU MỨC
+
+### 1. Yêu cầu Bài 5
+Kịch bản gồm 01 Wemos D1, 01 Raspberry Pi, 01 máy tính, 01 cảm biến nhiệt độ – độ ẩm, 02 LED (xanh, đỏ) và 01 LCD.
+Raspberry Pi là MQTT Broker:
+- Mỗi **5 giây**, Wemos publish nhiệt độ và độ ẩm dạng JSON vào `cq/NT532.R12/nhom10/dht/value`.
+- Máy tính subscribe topic này và đánh giá **3 mức**:
+  - **Bình thường:** nhiệt độ 25–27 °C **và** độ ẩm 40–70%.
+  - **Cảnh báo:** một trong hai đại lượng ra ngoài khoảng bình thường.
+  - **Nguy hiểm:** nhiệt độ lệch **quá 3 °C** hoặc độ ẩm lệch **quá 15%** so với khoảng bình thường.
+- Máy tính publish mức đánh giá vào `cq/NT532.R12/nhom10/dht/alert`. Wemos subscribe topic đó và thể hiện:
+  - **xanh sáng liên tục** khi bình thường;
+  - **đỏ nhấp nháy chậm** khi cảnh báo;
+  - **đỏ nhấp nháy nhanh** khi nguy hiểm;
+  - LCD hiển thị giá trị đo và tên mức hiện tại.
+- **Lưu ý:** để tránh cảnh báo chập chờn quanh ngưỡng, máy tính **chỉ chuyển sang mức mới khi điều kiện của mức đó đúng
+  liên tiếp 3 lần đo**, và **chỉ publish khi mức thay đổi**, không publish lặp lại mỗi 5 giây.
+
+```
+ [Wemos + DHT11] ── dht/value (mỗi 5s) ──► [Raspberry Pi: Mosquitto] ──► [Máy tính: bai5_dht_monitor.py]
+       ▲                                                                       │ đánh giá + chống chập chờn
+       └──────────── dht/alert (chỉ khi đổi mức) ◄── [Mosquitto] ◄─────────────┘
+```
+
+### 2. Danh sách linh kiện & Sơ đồ nối dây Bài 5
+
+| Linh kiện | Số lượng | Ghi chú |
+| :--- | :---: | :--- |
+| Wemos D1 (ESP8266) | 1 | MQTT Client |
+| DHT11 (module 3 chân) | 1 | Đo nhiệt độ ±2 °C, độ ẩm ±5% |
+| LED xanh, LED đỏ + trở $220\,\Omega$ | 2 | Đèn báo mức |
+| LCD 16x2 I2C | 1 | Địa chỉ 0x27 / 0x3F, code tự dò |
+| Raspberry Pi (Mosquitto) + máy tính | 1 + 1 | Broker + chương trình đánh giá |
+
+| Linh kiện | Chân linh kiện | GPIO | Nhãn trên Wemos D1 **dạng UNO** | Nhãn trên **D1 mini** |
+| :--- | :--- | :---: | :---: | :---: |
+| **DHT11** | VCC (+) | 3V3 | 3V3 | 3V3 |
+| | GND (−) | GND | GND | GND |
+| | DATA (OUT) | GPIO14 | D5 | D5 |
+| **LED xanh** | Anode (qua trở $220\,\Omega$) | GPIO12 | D6 | D6 |
+| **LED đỏ** | Anode (qua trở $220\,\Omega$) | GPIO13 | D7 | D7 |
+| **LCD I2C** | SDA | GPIO4 | D4 (hoặc chân **SDA** cạnh AREF) | D2 |
+| | SCL | GPIO5 | D3 (hoặc chân **SCL** cạnh AREF) | D1 |
+| | VCC / GND | 5V / GND | 5V / GND | 5V / GND |
+
+> Nếu dùng **DHT11 dạng 4 chân rời** (không có module), cần thêm trở $10\,k\Omega$ kéo chân DATA lên 3V3.
+
+### 3. Thiết kế bản tin MQTT
+
+| Topic | Chiều | Payload mẫu | QoS / Retain |
+| :--- | :--- | :--- | :--- |
+| `cq/NT532.R12/nhom10/dht/value` | Wemos → máy tính | `{"temperature": 26.0, "humidity": 55.0}` | 0 / không |
+| `cq/NT532.R12/nhom10/dht/alert` | Máy tính → Wemos | `{"level": "DANGER", "label": "NGUY HIỂM", "temperature": 31.0, "humidity": 55.0, "reason": "nhiệt độ lệch 4.0°C"}` | 1 / **có** |
+
+- `level` là một trong `NORMAL`, `WARNING`, `DANGER`. Wemos chỉ đọc trường này; các trường còn lại để người xem log
+  hiểu vì sao đổi mức.
+- Alert được publish với **retain**, nên Wemos khởi động lại vẫn nhận ngay mức hiện tại, không phải chờ lần đổi mức kế tiếp.
+
+### 4. Thuật toán đánh giá trên máy tính
+
+**Bước 1: đánh giá từng lần đo.** Gọi độ lệch là khoảng cách từ giá trị đo tới khoảng bình thường (bằng 0 nếu nằm
+trong khoảng):
+
+$$\Delta T = \begin{cases} 25 - T & T < 25 \\ T - 27 & T > 27 \\ 0 & \text{còn lại} \end{cases} \qquad
+\Delta H = \begin{cases} 40 - H & H < 40 \\ H - 70 & H > 70 \\ 0 & \text{còn lại} \end{cases}$$
+
+| Mức | Điều kiện | Tương đương |
+| :--- | :--- | :--- |
+| **NGUY HIỂM** | $\Delta T > 3$ **hoặc** $\Delta H > 15$ | $T < 22$ hoặc $T > 30$, hoặc $H < 25$ hoặc $H > 85$ |
+| **CẢNH BÁO** | không nguy hiểm, nhưng $\Delta T > 0$ hoặc $\Delta H > 0$ | ra ngoài khoảng bình thường |
+| **BÌNH THƯỜNG** | $\Delta T = 0$ **và** $\Delta H = 0$ | $25 \le T \le 27$ và $40 \le H \le 70$ |
+
+Giá trị biên đã kiểm thử: 22 °C → cảnh báo, 21,9 °C → nguy hiểm, 85% → cảnh báo, 85,1% → nguy hiểm.
+
+**Bước 2: chống chập chờn (lớp `LevelDebouncer`):**
+- Lần đo trùng mức hiện tại → xóa "ứng viên", không làm gì.
+- Lần đo ra mức khác → mức đó là **ứng viên**, đếm số lần **liên tiếp**. Bị ngắt quãng thì đếm lại từ đầu.
+- Đếm đủ **3** → đổi mức hiện tại và **publish một lần** vào `dht/alert`.
+- Lúc mới chạy chưa có mức nào, nên cũng cần 3 lần đo giống nhau mới publish mức đầu tiên.
+
+Log thực tế khi chạy thử (nhiệt độ dao động quanh ngưỡng không làm đổi mức):
+```
+T=28.0°C H=55.0% -> lần đo này: CẢNH BÁO (nhiệt độ lệch 1.0°C) | chờ xác nhận CẢNH BÁO 1/3 | mức hiện tại: BÌNH THƯỜNG
+T=26.0°C H=55.0% -> lần đo này: BÌNH THƯỜNG (trong khoảng bình thường) | mức hiện tại: BÌNH THƯỜNG
+T=28.0°C H=55.0% -> lần đo này: CẢNH BÁO (nhiệt độ lệch 1.0°C) | chờ xác nhận CẢNH BÁO 1/3 | mức hiện tại: BÌNH THƯỜNG
+T=28.0°C H=55.0% -> lần đo này: CẢNH BÁO (nhiệt độ lệch 1.0°C) | chờ xác nhận CẢNH BÁO 2/3 | mức hiện tại: BÌNH THƯỜNG
+T=28.0°C H=55.0% -> lần đo này: CẢNH BÁO (nhiệt độ lệch 1.0°C) | mức hiện tại: CẢNH BÁO
+>>> ĐỔI MỨC: CẢNH BÁO - publish cq/NT532.R12/nhom10/dht/alert
+```
+
+### 5. Thể hiện trên Wemos
+
+| Mức nhận được | LED xanh | LED đỏ | LCD dòng 2 |
+| :--- | :--- | :--- | :--- |
+| `NORMAL` | Sáng liên tục | Tắt | `Muc:BINH THUONG` |
+| `WARNING` | Tắt | Nháy **chậm** 1 Hz (0,5 s sáng / 0,5 s tắt) | `Muc:CANH BAO` |
+| `DANGER` | Tắt | Nháy **nhanh** 5 Hz (0,1 s sáng / 0,1 s tắt) | `Muc:NGUY HIEM` |
+| Chưa nhận được mức nào | Tắt | Tắt | `Muc:CHO DANH GIA` |
+
+LCD dòng 1 hiển thị giá trị đo, ví dụ `T:26.0C H:55%`. Nếu DHT đọc lỗi thì hiện `Loi cam bien DHT`.
+Mất kết nối broker thì dòng 2 hiện `Mat ket noi MQTT`.
+
+### 6. Giải thích mã nguồn Bài 5
+- **[Bai5/Bai5.ino](Bai5/Bai5.ino):**
+  - `readAndPublish()` đọc DHT11 mỗi 5 s. Đọc lỗi (`NaN`) thì không gửi. Đọc được thì tạo JSON bằng ArduinoJson
+    rồi `publish`.
+  - `onMqttMessage()` đọc trường `level` của JSON (chấp nhận cả chuỗi trơn `WARNING`), cập nhật `alertLevel` và LCD.
+  - `updateIndicators()` điều khiển LED theo `alertLevel` bằng `millis()`, không dùng `delay()`, nên vẫn nhận MQTT
+    trong lúc nháy đèn.
+  - Mất kết nối broker thì thử lại mỗi 3 s; vẫn đo và hiển thị lên LCD trong lúc đó.
+- **[pc/bai5_dht_monitor.py](pc/bai5_dht_monitor.py):**
+  - `classify()` cài đặt bảng ở mục 4, kèm lý do (đại lượng nào lệch, lệch bao nhiêu).
+  - `LevelDebouncer` cài đặt quy tắc 3 lần liên tiếp. Có thể đổi số lần bằng `--confirm`.
+  - Subscribe đặt trong `on_connect`, nên tự đăng ký lại sau khi mất kết nối.
+  - Bản tin sai định dạng bị bỏ qua và in cảnh báo.
+
+### 7. Chạy thử & Gợi ý ảnh chụp cho báo cáo
+1. **Arduino IDE:** cài thư viện **DHT sensor library** (Adafruit) và **Adafruit Unified Sensor**. Hai thư viện
+   **PubSubClient** và **ArduinoJson 7.x** đã cài ở Bài 2 và Bài 4.
+2. Sửa `MQTT_BROKER` trong `Bai5.ino` thành IP Raspberry Pi, nạp code, mở Serial Monitor ở **115200 baud**.
+3. **Máy tính** (thư mục `LAB3/pc`):
+   ```bash
+   python bai5_dht_monitor.py --broker <IP Raspberry Pi>
+   ```
+4. **Tạo các mức:** nhiệt độ phòng thường không nằm sẵn trong 25–27 °C, nên làm như sau:
+   - **Hà hơi** vào DHT11 thì độ ẩm tăng vọt (dễ lên > 85% → nguy hiểm).
+   - **Nắm tay** quanh cảm biến thì nhiệt độ tăng dần.
+   - **Thử nhanh không cần phần cứng:** dùng MQTTX publish giả vào `cq/NT532.R12/nhom10/dht/value`, lặp lại 3 lần mỗi giá trị:
+     - `{"temperature": 26, "humidity": 55}` → bình thường
+     - `{"temperature": 28, "humidity": 55}` → cảnh báo
+     - `{"temperature": 31, "humidity": 55}` → nguy hiểm
+5. Mở `mosquitto_sub` trên Pi để thấy alert **chỉ xuất hiện khi đổi mức**:
+   ```bash
+   mosquitto_sub -h localhost -t "cq/NT532.R12/nhom10/dht/#" -v
+   ```
+
+**Ảnh nên chụp cho báo cáo:**
+- Terminal máy tính khi có giá trị dao động quanh ngưỡng (đếm `1/3`, `2/3` rồi bị ngắt, không đổi mức).
+- Terminal khi đủ 3 lần thì đổi mức và publish.
+- `mosquitto_sub` thấy `dht/value` mỗi 5 s nhưng `dht/alert` chỉ lúc đổi mức.
+- LCD và LED ở cả 3 mức (nên quay video ngắn để thấy rõ nháy chậm và nháy nhanh).
+
+### 8. Lỗi thường gặp
+| Hiện tượng | Nguyên nhân / Cách xử lý |
+| :--- | :--- |
+| LCD báo `Loi cam bien DHT` | Sai chân DATA (phải là GPIO14), thiếu trở kéo lên với DHT11 rời, hoặc chọn nhầm `DHT22` |
+| Máy tính nhận dữ liệu nhưng Wemos không đổi đèn | Wemos chưa subscribe được: kiểm tra Serial có dòng `Da subscribe: .../dht/alert` |
+| Mới chạy được vài giây mà chưa có mức nào | Bình thường: cần 3 lần đo (khoảng 15 s) mới xác định mức đầu tiên |
+| Mức không đổi dù giá trị đã khác | Phải đúng **3 lần liên tiếp**; một lần đo xen kẽ mức khác sẽ làm đếm lại |
+| LCD không hiển thị | Bài 5 dùng chân I2C mặc định (GPIO4/GPIO5), khác Bài 1 (GPIO2/GPIO0) |
