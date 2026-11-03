@@ -1,36 +1,3 @@
-/**
- * ============================================================================
- * LAB 3 - BÀI 1: GHI NHỚ DÃY SỐ ĐÚNG (HTTP SERVER TRÊN ESP32)
- * Môn học: Công nghệ Internet of Things Hiện đại - UIT
- *
- * KỊCH BẢN:
- * - ESP32 dựng HTTP Server, trang "/" có 10 nút số từ 0 đến 9.
- * - Mỗi vòng, LED 7 đoạn lần lượt hiện một dãy số ngẫu nhiên: mỗi số sáng
- *   0.8 giây, giữa hai số tắt 0.25 giây.
- * - Người chơi bấm lại từng số trên web, mỗi lần bấm gửi URL parameters:
- *       GET /api/number?id=<vị trí trong dãy, bắt đầu từ 1>&value=<chữ số>
- * - Vòng 1 dãy có 2 số, mỗi vòng nhập đúng thì dãy dài thêm 1 số.
- * - Nhập sai 1 số hoặc quá 5 giây không bấm -> trò chơi kết thúc, trang web
- *   tự chuyển sang /summary (độ dài dãy lớn nhất đạt được).
- * - LCD hiển thị số vòng hiện tại và các số đã nhập đúng.
- *
- * CÁC ĐƯỜNG DẪN HTTP:
- *   GET /                         Giao diện chơi
- *   GET /summary                  Giao diện tổng kết
- *   GET /api/start                Bắt đầu ván mới
- *   GET /api/state                Trạng thái hiện tại (JSON, web hỏi định kỳ)
- *   GET /api/number?id=1&value=7  Gửi chữ số người chơi chọn
- *
- * PHẦN CỨNG: 1 ESP32 DevKit, 1 LED 7 đoạn 1 số cathode chung + 7 điện trở 220 Ohm,
- *            1 LCD 16x2 có module I2C.
- *
- * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D13/G13/IO13):
- *   LED 7 đoạn: a->GPIO13, b->GPIO14, c->GPIO25, d->GPIO26, e->GPIO27,
- *               f->GPIO32, g->GPIO33 (mỗi đoạn qua 1 trở 220 Ohm), COM->GND
- *   LCD I2C   : SDA->GPIO21, SCL->GPIO22, VCC->5V, GND->GND
- * ============================================================================
- */
-
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Wire.h>
@@ -39,12 +6,9 @@
 const char *WIFI_SSID = "UiTiOt-E3.1";
 const char *WIFI_PASS = "UiTiOtAP";
 
-// Chân I2C mặc định của ESP32
 const int LCD_SDA_PIN = 21;
 const int LCD_SCL_PIN = 22;
 
-// Thứ tự a, b, c, d, e, f, g. Tránh các chân quyết định chế độ khởi động
-// của ESP32 (0, 2, 5, 12, 15) để cắm mạch vào vẫn khởi động bình thường.
 const int SEG_PINS[7] = {13, 14, 25, 26, 27, 32, 33};
 const bool IS_COMMON_ANODE = false;
 
@@ -96,9 +60,6 @@ int wrongValue = -1;
 unsigned long phaseStartTime = 0;
 unsigned long lastInputTime = 0;
 
-// ============================================================================
-// GIAO DIỆN WEB
-// ============================================================================
 const char GAME_PAGE[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html lang="vi">
@@ -173,8 +134,6 @@ function render() {
   $('start').style.display = idle ? 'inline-block' : 'none';
   $('last').style.display = (st.state === 'GAME_OVER') ? 'block' : 'none';
   if (!idle) active = true;
-  // Server không tự đẩy dữ liệu được (HTTP là request/response),
-  // nên trang tự phát hiện kết thúc qua kết quả hỏi định kỳ rồi chuyển trang.
   if (st.state === 'GAME_OVER' && active) location.href = '/summary';
 }
 
@@ -211,9 +170,6 @@ poll();
 </html>
 )=====";
 
-// ============================================================================
-// LED 7 ĐOẠN
-// ============================================================================
 void displaySegmentPattern(byte pattern) {
   for (int i = 0; i < 7; i++) {
     bool segOn = (pattern >> (6 - i)) & 0x01;
@@ -239,10 +195,6 @@ void displayDigit(int num) {
   }
 }
 
-// ============================================================================
-// LCD
-// ============================================================================
-// Module I2C của LCD thường có địa chỉ 0x27 hoặc 0x3F, tự dò để khỏi sửa code
 uint8_t detectLcdAddress() {
   const uint8_t candidates[2] = {0x27, 0x3F};
   for (int i = 0; i < 2; i++) {
@@ -274,7 +226,6 @@ void showRoundHeaderOnLcd() {
   lcdLine(0, "Vong " + String(currentRound) + " - " + String(sequenceLength) + " so");
 }
 
-// Dòng 2: các số đã nhập đúng + dấu '_' cho các số còn lại, ví dụ "Dung:58__"
 void showInputProgressOnLcd() {
   showRoundHeaderOnLcd();
   String progress = enteredDigits();
@@ -294,9 +245,6 @@ void showIdleOnLcd() {
   lcdLine(1, WiFi.localIP().toString());
 }
 
-// ============================================================================
-// LOGIC TRÒ CHƠI
-// ============================================================================
 void startRound() {
   for (int i = 0; i < sequenceLength; i++) {
     sequence[i] = random(0, 10);
@@ -372,7 +320,6 @@ void checkInputTimeout() {
   }
 }
 
-// Hiện dãy số không dùng delay() để server vẫn trả lời web trong lúc hiển thị
 void updateShowing(unsigned long now) {
   switch (showPhase) {
     case PHASE_PREPARE:
@@ -409,9 +356,6 @@ void updateShowing(unsigned long now) {
   }
 }
 
-// ============================================================================
-// HTTP HANDLERS
-// ============================================================================
 const char *stateName() {
   switch (gameState) {
     case STATE_IDLE: return "IDLE";
@@ -488,7 +432,6 @@ void handleNumber() {
     sendStateJson(400, "invalid_id");
     return;
   }
-  // id nhỏ hơn vị trí đang chờ: request cũ/bấm trùng, bỏ qua không tính sai
   if (id <= inputIndex) {
     sendStateJson(200, "duplicate");
     return;
@@ -557,9 +500,6 @@ void handleNotFound() {
   server.send(404, "text/plain", "404 Not Found");
 }
 
-// ============================================================================
-// SETUP & LOOP
-// ============================================================================
 void setup() {
   Serial.begin(115200);
   Serial.println();
@@ -589,8 +529,6 @@ void setup() {
   Serial.println();
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
-  // random() của ESP32 lấy số từ bộ sinh ngẫu nhiên phần cứng, không cần randomSeed()
 
   server.on("/", handleRoot);
   server.on("/summary", handleSummary);
