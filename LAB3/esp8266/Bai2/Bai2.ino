@@ -40,7 +40,7 @@ const char *WIFI_SSID = "UiTiOt-E3.1";
 const char *WIFI_PASS = "UiTiOtAP";
 
 // Địa chỉ máy tính chạy bai2_server.py (server in ra dòng này khi khởi động)
-const char *SERVER_URL = "http://192.168.1.10:5000";
+const char *SERVER_URL = "http://172.31.9.36:5000";
 
 // GY-302 dùng I2C mặc định (GPIO4/GPIO5), nên 3 LED dời sang GPIO13/16/15.
 // GPIO15 phải ở mức LOW khi khởi động: LED nối về GND giữ đúng mức này.

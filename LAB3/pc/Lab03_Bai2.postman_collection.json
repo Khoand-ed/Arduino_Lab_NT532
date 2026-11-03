@@ -5,7 +5,10 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://127.0.0.1:5000" }
+    {
+      "key": "base_url",
+      "value": "http://172.31.9.36:5000"
+    }
   ],
   "item": [
     {
@@ -19,10 +22,15 @@
       "name": "PUT doi ca bo cau hinh",
       "request": {
         "method": "PUT",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"warning_threshold\": 200,\n  \"alarm_threshold\": 20,\n  \"send_interval\": 5\n}"
+          "raw": "{\n  \"warning_threshold\": 30,\n  \"alarm_threshold\": 0,\n  \"send_interval\": 5\n}"
         },
         "url": "{{base_url}}/api/config"
       }
@@ -31,7 +39,12 @@
       "name": "PUT doi 1 truong (chu ky 2 giay)",
       "request": {
         "method": "PUT",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"send_interval\": 2\n}"
@@ -43,7 +56,12 @@
       "name": "PUT cau hinh sai (bao loi)",
       "request": {
         "method": "PUT",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"warning_threshold\": 10,\n  \"alarm_threshold\": 50\n}"
