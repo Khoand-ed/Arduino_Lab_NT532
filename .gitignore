@@ -22,3 +22,6 @@ __pycache__/
 
 # Runtime state of Lab 3 PC scripts
 LAB3/pc/data/
+
+# Python virtual environments
+.venv/

@@ -1,0 +1,49 @@
+{
+  "_comment": "Cấu hình chung Lab 4 (NT532.R12 - Nhóm 10). Tài khoản dưới đây là tài khoản THỬ NGHIỆM cho ThingsBoard chạy local, không dùng ở nơi khác. tb_url/mqtt_host dùng cho các script chạy trên laptop; ESP32 và Raspberry Pi dùng IP LAN của laptop (xem bằng ipconfig).",
+  "tb_url": "http://localhost:8080",
+  "mqtt_host": "localhost",
+  "mqtt_port": 1883,
+  "sysadmin": {
+    "email": "sysadmin@thingsboard.org",
+    "password": "sysadmin"
+  },
+  "tenant": {
+    "title": "NT532.R12 - Nhom 10",
+    "description": "Lab 4 - Xây dựng giao diện ứng dụng để tương tác với mô hình IoT"
+  },
+  "tenant_admin": {
+    "email": "nhom10@nt532.local",
+    "password": "Nhom10@2026",
+    "first_name": "Nhom",
+    "last_name": "10"
+  },
+  "inactivity_timeout_ms": 30000,
+  "device_profiles": [
+    {
+      "name": "ESP32-BH1750-Node",
+      "description": "ESP32 DevKit đo ánh sáng bằng BH1750 (GY-302) và điều khiển 2 LED qua RPC"
+    },
+    {
+      "name": "RPi-DHT11-Node",
+      "description": "Raspberry Pi đo nhiệt độ, độ ẩm bằng DHT11"
+    }
+  ],
+  "devices": [
+    {
+      "key": "esp32",
+      "name": "ESP32-BH1750",
+      "label": "ESP32 DevKit (BH1750 + 2 LED)",
+      "profile": "ESP32-BH1750-Node",
+      "access_token": "nhom10-esp32-bh1750",
+      "telemetry_keys": ["light", "rssi", "led1", "led2", "event"]
+    },
+    {
+      "key": "rpi",
+      "name": "RaspberryPi-DHT11",
+      "label": "Raspberry Pi (DHT11)",
+      "profile": "RPi-DHT11-Node",
+      "access_token": "nhom10-rpi-dht11",
+      "telemetry_keys": ["temperature", "humidity", "event"]
+    }
+  ]
+}
