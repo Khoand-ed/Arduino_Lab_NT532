@@ -1,0 +1,10 @@
+# Lab 4 - Raspberry Pi (dht11_thingsboard.py). Cài trong venv, KHÔNG dùng sudo pip:
+#   sudo apt install -y python3-venv python3-pip libgpiod-dev python3-libgpiod
+#   python3 -m venv --system-site-packages .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+# Module gpiod (Blinka dùng để điều khiển GPIO) lấy từ gói apt python3-libgpiod, nên venv
+# phải tạo với --system-site-packages. Chi tiết xem phần CÀI ĐẶT ở đầu dht11_thingsboard.py.
+# Chạy thử trên laptop với --fake-sensor chỉ cần paho-mqtt.
+adafruit-circuitpython-dht>=4.0
+adafruit-blinka>=10.0
+paho-mqtt>=2.0

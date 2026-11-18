@@ -1,0 +1,48 @@
+# LAB 4 - Dịch vụ systemd chạy dht11_thingsboard.py khi Raspberry Pi khởi động
+# (NT532.R12 - Nhóm 10)
+#
+# GIẢ ĐỊNH ĐƯỜNG DẪN (sửa lại nếu khác):
+#   - User đăng nhập là "pi". Raspberry Pi OS Bookworm cho tự đặt tên user lúc cài, nếu
+#     khác "pi" thì sửa User=, Group= và mọi đường dẫn /home/pi bên dưới.
+#   - Script ở /home/pi/lab4/dht11_thingsboard.py
+#   - Venv ở /home/pi/lab4/.venv, tạo theo phần CÀI ĐẶT ở đầu script:
+#       cd /home/pi/lab4
+#       python3 -m venv --system-site-packages .venv
+#       .venv/bin/pip install -r requirements.txt
+#     ExecStart gọi thẳng .venv/bin/python nên không cần "source .venv/bin/activate".
+#   - TB_HOST là IP LAN của laptop chạy ThingsBoard (xem bằng ipconfig trên laptop).
+#
+# CÀI ĐẶT DỊCH VỤ:
+#   sudo cp lab4-dht11.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now lab4-dht11     # chạy ngay và tự chạy mỗi lần khởi động
+#   systemctl status lab4-dht11
+#   journalctl -u lab4-dht11 -f                # xem log (Ctrl+C để thoát)
+#   sudo systemctl stop lab4-dht11             # dừng (script nhận SIGTERM, dừng sạch)
+# Sửa file này xong thì chạy lại: sudo systemctl daemon-reload && sudo systemctl restart lab4-dht11
+
+[Unit]
+Description=Lab 4 - DHT11 -> ThingsBoard (NT532.R12 - Nhom 10)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+# Quyền truy cập /dev/gpiochip* (user pi mặc định đã thuộc nhóm gpio)
+SupplementaryGroups=gpio
+WorkingDirectory=/home/pi/lab4
+Environment=TB_HOST=192.168.1.100
+Environment=TB_PORT=1883
+Environment=TB_TOKEN=nhom10-rpi-dht11
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/lab4/.venv/bin/python /home/pi/lab4/dht11_thingsboard.py
+# Chết vì bất kỳ lý do gì (mất GPIO, lỗi thư viện...) thì chạy lại sau 5 giây
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

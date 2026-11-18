@@ -44,6 +44,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/thingsboard
       SPRING_DATASOURCE_PASSWORD: postgres
       TZ: Asia/Ho_Chi_Minh
+      # Kiểm tra trạng thái thiết bị mỗi 10 s (mặc định 60 s) để Online/Offline
+      # trên dashboard đổi nhanh hơn (inactivityTimeout của device = 30 s)
+      DEFAULT_STATE_CHECK_INTERVAL: 10
     depends_on:
       postgres:
         condition: service_healthy

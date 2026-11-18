@@ -6,9 +6,13 @@ Cấu hình tự động ThingsBoard CE chạy local (Docker) qua REST API, theo
      kích hoạt luôn bằng mật khẩu trong config.json (không cần gửi mail).
   2. Đăng nhập tenant admin, tạo 2 device profile: ESP32-BH1750-Node, RPi-DHT11-Node.
   3. Tạo 2 device với access token cố định (ESP32-BH1750, RaspberryPi-DHT11) và đặt
-     server attribute inactivityTimeout = 30000 ms: thiết bị ngừng gửi ~30 s thì
-     "active" chuyển sang false (lưu ý: ThingsBoard kiểm tra trạng thái theo chu kỳ
-     DEFAULT_STATE_CHECK_INTERVAL, mặc định 60 s, nên có thể trễ thêm tới 60 s).
+     server attribute inactivityTimeout = 30000 ms: thiết bị im lặng ~30 s thì
+     "active" chuyển sang false. Lưu ý:
+       - Gói PINGREQ (keepalive MQTT) cũng tính là hoạt động: thiết bị còn giữ kết nối
+         MQTT thì vẫn "active" dù không gửi telemetry; mất điện / mất Wi-Fi / ngắt kết
+         nối thì mới chuyển sang không hoạt động.
+       - ThingsBoard kiểm tra trạng thái theo chu kỳ DEFAULT_STATE_CHECK_INTERVAL (mặc
+         định 60 s), nên thực tế mất 30..90 s.
   4. Bổ sung Root Rule Chain (giữ nguyên các luồng mặc định): mỗi sự kiện
      CONNECTED / DISCONNECTED / ACTIVE / INACTIVE và mỗi lệnh RPC server -> thiết bị
      (vd "RPC setLed1(true)") được lưu thành telemetry "event" của thiết bị.
@@ -322,7 +326,9 @@ SAVE_NODE_NAME = RULE_NODE_PREFIX + "Save event"
 
 # TBEL: đổi sự kiện thành bản tin telemetry {"event": "..."}. Node "save time series"
 # chỉ nhận bản tin loại POST_TELEMETRY_REQUEST nên phải đổi msgType.
-# Với RPC từ server, msg.params là chuỗi JSON (vd "true", "{\"led\":1,\"state\":true}").
+# Với RPC từ server (REST /api/rpc/oneway|twoway), msg.params là chuỗi JSON của params:
+#   true -> "RPC setLed1(true)", "on" -> "RPC setLed2(\"on\")",
+#   {"led":1,"state":true} -> "RPC setLed({\"led\":1,\"state\":true})", không có -> "RPC getLeds()"
 EVENT_SCRIPT_TBEL = """\
 var event = msgType;
 if (msgType == "CONNECT_EVENT") {
@@ -334,7 +340,10 @@ if (msgType == "CONNECT_EVENT") {
 } else if (msgType == "INACTIVITY_EVENT") {
     event = "INACTIVE";
 } else if (msgType == "RPC_CALL_FROM_SERVER_TO_DEVICE") {
-    var params = msg.params != null ? msg.params : "";
+    var params = msg.params;
+    if (params == null || params == "null") {
+        params = "";
+    }
     event = "RPC " + msg.method + "(" + params + ")";
 }
 return {msg: {event: event}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
@@ -345,7 +354,8 @@ var names = {CONNECT_EVENT: "CONNECTED", DISCONNECT_EVENT: "DISCONNECTED",
              ACTIVITY_EVENT: "ACTIVE", INACTIVITY_EVENT: "INACTIVE"};
 var event = names[msgType] || msgType;
 if (msgType === "RPC_CALL_FROM_SERVER_TO_DEVICE") {
-    var params = msg.params != null ? msg.params : "";
+    var params = msg.params;
+    if (params === undefined || params === null || params === "null") { params = ""; }
     if (typeof params !== "string") { params = JSON.stringify(params); }
     event = "RPC " + msg.method + "(" + params + ")";
 }
