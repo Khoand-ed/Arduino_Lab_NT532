@@ -55,11 +55,13 @@ CÀI ĐẶT TRÊN RASPBERRY PI OS BOOKWORM (Python 3.11+)
        python -c "import gpiod, board, adafruit_dht; print(board.D4)"
      User chạy chương trình phải thuộc nhóm gpio (user tạo lúc cài Raspberry Pi OS đã có sẵn),
      kiểm tra bằng lệnh: groups
-  5) Chương trình dùng adafruit_dht.DHT11(board.D4, use_pulseio=False): đọc bằng cách
-     bit-bang trực tiếp qua libgpiod. Chế độ mặc định của thư viện (pulseio) chạy thêm chương
+  5) Chế độ đọc DHT11 chọn tự động theo model: Pi 3/4 dùng pulseio (chương trình phụ
+     libgpiod_pulsein đo xung, bit-bang bằng Python trên Pi 4 thường quá chậm và báo "DHT sensor
+     not found"); Pi 5 dùng adafruit_dht.DHT11(board.D4, use_pulseio=False), tức bit-bang
+     trực tiếp qua libgpiod. Chế độ mặc định của thư viện (pulseio) chạy thêm chương
      trình phụ libgpiod_pulsein, chương trình này từng lỗi trên Pi 5 ("Timed out waiting for
      PulseIn message") và nếu không gọi dht.exit() thì còn giữ chân GPIO ("Unable to set line
-     4 to input"). Muốn thử pulseio thì thêm tùy chọn --pulseio.
+     4 to input"). Ép chế độ bằng tùy chọn --pulseio hoặc --bitbang.
   Nguồn tham khảo (truy cập 11/2026):
     https://learn.adafruit.com/circuitpython-on-raspberrypi-linux/installing-circuitpython-on-raspberry-pi
     https://learn.adafruit.com/python-virtual-environment-usage-on-raspberry-pi/basic-venv-usage
@@ -77,7 +79,7 @@ CHẠY (trong venv):
 
 Tùy chọn (biến môi trường tương ứng, tham số dòng lệnh được ưu tiên hơn):
   --host (TB_HOST), --port (TB_PORT), --token (TB_TOKEN), --interval (TB_INTERVAL),
-  --gpio (DHT_GPIO), --fake-sensor (DHT_FAKE=1), --pulseio, --duration, --fake-error-rate
+  --gpio (DHT_GPIO), --fake-sensor (DHT_FAKE=1), --pulseio / --bitbang, --duration, --fake-error-rate
 """
 
 import argparse
@@ -354,8 +356,11 @@ def parse_args():
                         help="dùng số liệu giả, không cần DHT11 (chạy thử trên laptop)")
     parser.add_argument("--fake-error-rate", type=float, default=0.0,
                         help="xác suất giả lập một lần đọc lỗi khi dùng --fake-sensor (0..1)")
-    parser.add_argument("--pulseio", action="store_true",
-                        help="đọc DHT11 bằng pulseio (libgpiod_pulsein) thay vì bit-bang")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--pulseio", action="store_true",
+                      help="ép đọc DHT11 bằng pulseio (libgpiod_pulsein), mặc định trên Pi 3/4")
+    mode.add_argument("--bitbang", action="store_true",
+                      help="ép đọc DHT11 bằng bit-bang (use_pulseio=False), mặc định trên Pi 5")
     parser.add_argument("--duration", type=float, default=0,
                         help="tự dừng sau số giây này (0 = chạy mãi, dùng khi chạy thử)")
     args = parser.parse_args()
@@ -371,10 +376,18 @@ def main():
             stream.reconfigure(encoding="utf-8", line_buffering=True)
     args = parse_args()
 
-    sensor = FakeSensor(args.fake_error_rate) if args.fake_sensor else Dht11Sensor(args.gpio, args.pulseio)
+    model = read_board_model()
+    # Pi 3/4: pulseio (chương trình C libgpiod_pulsein đo xung, đủ nhanh cho DHT11). Bit-bang
+    # bằng Python trên Pi 4 thường quá chậm -> "DHT sensor not found, check wiring".
+    # Pi 5: pulseio từng lỗi timeout (Blinka issue 752) nên mặc định bit-bang.
+    if args.pulseio or args.bitbang:
+        use_pulseio = args.pulseio
+    else:
+        use_pulseio = "Raspberry Pi 5" not in (model or "")
+    sensor = FakeSensor(args.fake_error_rate) if args.fake_sensor else Dht11Sensor(args.gpio, use_pulseio)
 
     hostname = socket.gethostname()
-    board_name = read_board_model() or f"{platform.system()} {platform.machine()}"
+    board_name = model or f"{platform.system()} {platform.machine()}"
     if args.fake_sensor:
         board_name += " (fake sensor)"
 

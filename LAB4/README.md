@@ -248,23 +248,25 @@ Hệ thống dùng **2 board ESP32 DevKit**. Mỗi board có một sketch và m�
 
 ### 5.1. Linh kiện & nối dây
 
+> **Board dùng trong lab là WeMos D1 R32** (ESP32 dạng Arduino UNO). Nhãn in trên board là kiểu Arduino, **khác số GPIO** trong code: D2 = GPIO26, D3 = GPIO25, **A4/A5 = GPIO36/39 (chỉ đọc analog, KHÔNG phải I2C)**. I2C nằm ở 2 chân riêng có nhãn **SDA/SCL** cạnh chân AREF.
+
 **ESP32 #1 + GY-302 (BH1750):**
 
-| Chân GY-302 | ESP32 | Nhãn trên DevKit |
+| Chân GY-302 | ESP32 | Nhãn trên D1 R32 |
 | :--- | :--- | :--- |
 | VCC | 3.3V | 3V3 |
 | GND | GND | GND |
-| SDA | GPIO21 | D21 |
-| SCL | GPIO22 | D22 |
-| ADDR | để trống (địa chỉ I2C 0x23) | – |
+| SDA | GPIO21 | **SDA** (cạnh AREF), không phải A4 |
+| SCL | GPIO22 | **SCL** (cạnh AREF), không phải A5 |
+| ADDR | để trống (0x23) hoặc nối 3.3V (0x5C) | code tự thử cả hai |
 
 **ESP32 #2 + 2 LED:**
 
-| Linh kiện | Chân linh kiện | ESP32 | Nhãn trên DevKit |
+| Linh kiện | Chân linh kiện | ESP32 | Nhãn trên D1 R32 |
 | :--- | :--- | :--- | :--- |
-| LED 1 | Anode (chân dài) → trở 220 Ω | GPIO25 | D25 |
+| LED 1 | Anode (chân dài) → trở 220 Ω | GPIO25 | D3 (IO25) |
 | | Cathode (chân ngắn) | GND | GND |
-| LED 2 | Anode (chân dài) → trở 220 Ω | GPIO26 | D26 |
+| LED 2 | Anode (chân dài) → trở 220 Ω | GPIO26 | D2 (IO26) |
 | | Cathode (chân ngắn) | GND | GND |
 
 Không dùng các chân strapping GPIO0, 2, 5, 12, 15.
@@ -503,6 +505,7 @@ Kết quả nhóm đã kiểm thử với ThingsBoard local:
 | Công tắc LED bị khóa | ESP32 #2 (`ESP32-LED`) đang offline. Bật board và đợi kết nối |
 | Bấm LED nhưng log báo `RPC FAILED: NO_ACTIVE_CONNECTION` | ESP32 #2 không kết nối vào ThingsBoard lúc gửi lệnh |
 | 2 ESP32 lúc online lúc offline luân phiên | Nạp nhầm cùng một sketch (cùng token) cho cả 2 board. ThingsBoard chỉ giữ 1 kết nối cho mỗi token nên 2 board đá nhau ra. Nạp đúng sketch cho từng board |
+| ESP32 #1 báo `[I2C] Không thấy thiết bị nào` | GY-302 cắm sai chân. Trên D1 R32 phải cắm vào 2 chân **SDA/SCL** cạnh AREF, không phải A4/A5. Kiểm tra VCC → 3V3 và GND |
 | Pi báo `DHT11 read error` liên tục | Kiểm tra dây DATA ở GPIO4 (Pin 7) và nguồn 3.3V. Thử `--pulseio`. Chạy lại bước kiểm tra ở mục 6.2 |
 | `error: externally-managed-environment` khi `pip install` trên Pi | Chưa vào venv. Chạy `source .venv/bin/activate` (mục 6.2) |
 | Cổng 1883 đã bị chiếm khi `docker compose up` | Mosquitto của Lab 3 đang chạy trên laptop. Tắt dịch vụ `mosquitto` |

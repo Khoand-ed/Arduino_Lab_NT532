@@ -26,15 +26,14 @@
  * - Wi-Fi và MQTT tự kết nối lại mà không chặn loop() (MQTT chờ 2, 4, 8...
  *   tối đa 30 giây giữa các lần thử). Mất kết nối thì LED giữ nguyên trạng thái.
  *
- * PHẦN CỨNG: 1 ESP32 DevKit, 2 LED + 2 điện trở 220 Ohm.
+ * PHẦN CỨNG: 1 board WeMos D1 R32 (ESP32 dạng Arduino UNO), 2 LED + 2 điện trở 220 Ohm.
  *
- * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D25/G25/IO25):
- *   Linh kiện         Chân linh kiện                  ESP32       Nhãn trên DevKit
- *   LED 1             Anode (chân dài) -> trở 220 Ohm GPIO25      D25
- *                     Cathode (chân ngắn)             GND         GND
- *   LED 2             Anode (chân dài) -> trở 220 Ohm GPIO26      D26
- *                     Cathode (chân ngắn)             GND         GND
- *   Không dùng các chân strapping GPIO0/2/5/12/15.
+ * SƠ ĐỒ NỐI DÂY (D1 R32 in nhãn kiểu Arduino UNO, KHÁC số GPIO):
+ *   Linh kiện   Chân linh kiện                   ESP32     Nhãn trên D1 R32
+ *   LED 1       Anode (chân dài) -> trở 220 Ohm  GPIO25    D3 (IO25)
+ *               Cathode (chân ngắn)              GND       GND
+ *   LED 2       Anode (chân dài) -> trở 220 Ohm  GPIO26    D2 (IO26)
+ *               Cathode (chân ngắn)              GND       GND
  *
  * THƯ VIỆN: PubSubClient (Nick O'Leary) 2.8, ArduinoJson (Benoit Blanchon) 7.x;
  *           board "esp32" (Espressif) 3.x
@@ -53,7 +52,7 @@ const char *WIFI_PASS = "UiTiOtAP";
 
 // IP LAN của laptop đang chạy ThingsBoard (Docker). Trên laptop chạy lệnh
 // ipconfig, lấy "IPv4 Address" của card Wi-Fi (cùng mạng với ESP32) thay vào đây.
-const char *TB_HOST = "192.168.1.100";
+const char *TB_HOST = "172.31.9.50";
 const int TB_PORT = 1883;
 // Access token của thiết bị "ESP32-LED" (do thingsboard/provision.py tạo)
 const char *ACCESS_TOKEN = "nhom10-esp32-led";

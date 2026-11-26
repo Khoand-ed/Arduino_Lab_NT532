@@ -19,15 +19,17 @@
  * - Wi-Fi và MQTT tự kết nối lại mà không chặn loop() (MQTT chờ 2, 4, 8...
  *   tối đa 30 giây giữa các lần thử).
  *
- * PHẦN CỨNG: 1 ESP32 DevKit, 1 cảm biến ánh sáng GY-302 (BH1750, I2C).
+ * PHẦN CỨNG: 1 board WeMos D1 R32 (ESP32 dạng Arduino UNO), 1 cảm biến ánh sáng
+ *            GY-302 (BH1750, I2C).
  *
- * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D21/G21/IO21):
- *   Linh kiện         Chân linh kiện                  ESP32       Nhãn trên DevKit
- *   GY-302 (BH1750)   VCC                             3.3V        3V3
- *                     GND                             GND         GND
- *                     SDA                             GPIO21      D21
- *                     SCL                             GPIO22      D22
- *                     ADDR: để trống (địa chỉ I2C 0x23)
+ * SƠ ĐỒ NỐI DÂY (D1 R32 in nhãn kiểu Arduino UNO, KHÁC số GPIO):
+ *   GY-302 (BH1750)   ESP32         Nhãn trên D1 R32
+ *   VCC               3.3V          3V3
+ *   GND               GND           GND
+ *   SDA               GPIO21        SDA (chân riêng cạnh AREF)
+ *   SCL               GPIO22        SCL (chân riêng cạnh AREF)
+ *   ADDR: để trống (0x23) hoặc nối 3.3V (0x5C), code tự thử cả hai
+ *   KHÔNG cắm vào A4/A5: trên D1 R32 là GPIO36/39, chỉ đọc analog, không có I2C.
  *
  * THƯ VIỆN: PubSubClient (Nick O'Leary) 2.8, ArduinoJson (Benoit Blanchon) 7.x,
  *           BH1750 (Christopher Laws) 1.3.x; board "esp32" (Espressif) 3.x
@@ -48,7 +50,7 @@ const char *WIFI_PASS = "UiTiOtAP";
 
 // IP LAN của laptop đang chạy ThingsBoard (Docker). Trên laptop chạy lệnh
 // ipconfig, lấy "IPv4 Address" của card Wi-Fi (cùng mạng với ESP32) thay vào đây.
-const char *TB_HOST = "192.168.1.100";
+const char *TB_HOST = "172.31.9.50";
 const int TB_PORT = 1883;
 // Access token của thiết bị "ESP32-BH1750" (do thingsboard/provision.py tạo)
 const char *ACCESS_TOKEN = "nhom10-esp32-bh1750";
@@ -149,7 +151,33 @@ void publishConnectEvent() {
 bool reinitLightSensor() {
   Wire.end();
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  return lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
+  // GY-302: chân ADDR để trống/nối GND -> 0x23, nối 3.3V -> 0x5C
+  const byte addresses[] = {0x23, 0x5C};
+  for (byte addr : addresses) {
+    if (lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, addr)) {
+      Serial.printf("[BH1750] Tìm thấy GY-302 ở địa chỉ I2C 0x%02X\n", addr);
+      return true;
+    }
+  }
+  scanI2cBus();
+  return false;
+}
+
+// Quét bus I2C để biết dây SDA/SCL có nối đúng không (chỉ chạy khi không tìm thấy BH1750)
+void scanI2cBus() {
+  int found = 0;
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("[I2C] Có thiết bị ở địa chỉ 0x%02X\n", addr);
+      found++;
+    }
+  }
+  if (found == 0) {
+    Serial.printf("[I2C] Không thấy thiết bị nào trên SDA=GPIO%d, SCL=GPIO%d.\n", I2C_SDA_PIN, I2C_SCL_PIN);
+    Serial.println("[I2C] Board D1 R32: cắm SDA/SCL của GY-302 vào 2 chân có nhãn SDA/SCL (cạnh AREF),");
+    Serial.println("[I2C] KHÔNG cắm vào A4/A5 (trên D1 R32 là GPIO36/39, chỉ đọc analog). VCC -> 3V3.");
+  }
 }
 
 // Đọc cảm biến, in ra Serial và gửi telemetry (nếu đang kết nối MQTT)
@@ -313,10 +341,10 @@ void setup() {
   Serial.println();
   Serial.println("=== LAB 4 - ESP32 #1: BH1750 -> ThingsBoard (MQTT) ===");
 
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  lightSensorReady = lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
-  Serial.println(lightSensorReady ? "[BH1750] Đã khởi tạo GY-302 (I2C 0x23)"
-                                  : "[BH1750] Không tìm thấy GY-302, kiểm tra dây SDA/SCL (sẽ thử lại)");
+  lightSensorReady = reinitLightSensor();
+  if (!lightSensorReady) {
+    Serial.println("[BH1750] Không tìm thấy GY-302, kiểm tra dây SDA/SCL (sẽ thử lại mỗi chu kỳ)");
+  }
 
   mqtt.setServer(TB_HOST, TB_PORT);
   if (!mqtt.setBufferSize(MQTT_BUFFER_SIZE)) {
