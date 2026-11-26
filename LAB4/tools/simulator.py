@@ -1,5 +1,5 @@
 """
-LAB 4 - GIẢ LẬP 2 THIẾT BỊ (ESP32-BH1750, RaspberryPi-DHT11) GỬI LÊN THINGSBOARD (chạy trên máy tính)
+LAB 4 - GIẢ LẬP 3 THIẾT BỊ (ESP32-BH1750, ESP32-LED, RaspberryPi-DHT11) GỬI LÊN THINGSBOARD (chạy trên máy tính)
 
 !!! ĐÂY LÀ CÔNG CỤ KIỂM THỬ. Số liệu do chương trình tự sinh, KHÔNG phải số đo thật.
 !!! Ảnh chụp, số liệu, minh chứng trong báo cáo phải lấy từ ESP32 và Raspberry Pi THẬT.
@@ -8,9 +8,13 @@ LAB 4 - GIẢ LẬP 2 THIẾT BỊ (ESP32-BH1750, RaspberryPi-DHT11) GỬI LÊN 
 
 Dùng để thử ThingsBoard, rule chain và dashboard khi chưa có phần cứng. Mỗi thiết bị giả lập là
 một kết nối MQTT riêng (username = access token), dùng đúng giao thức của code thật:
-- ESP32 giả lập (giống esp32/Lab4_ESP32/Lab4_ESP32.ino):
+- ESP32 #1 giả lập (giống esp32/Lab4_ESP32_BH1750/Lab4_ESP32_BH1750.ino):
     * Mỗi 5 giây gửi telemetry {"light": 123.4, "rssi": -60}.
-    * Khi kết nối: client attributes (board, firmware, ip, mac, sensor, led1, led2) và telemetry
+    * Khi kết nối: client attributes (board, firmware, ip, mac, sensor) và telemetry
+      {"event": "BOOT"} (lần đầu) hoặc "MQTT RECONNECT".
+- ESP32 #2 giả lập (giống esp32/Lab4_ESP32_LED/Lab4_ESP32_LED.ino):
+    * Mỗi 5 giây gửi telemetry {"rssi": -60}.
+    * Khi kết nối: client attributes (board, firmware, ip, mac, led1, led2) và telemetry
       {"led1", "led2", "event": "BOOT"} (lần đầu) hoặc "MQTT RECONNECT".
     * Nhận RPC ở v1/devices/me/rpc/request/+ và trả lời ở v1/devices/me/rpc/response/{id}:
         setLed1, setLed2  params true/false, 0/1, "on"/"off", {"state": ..}... -> true/false
@@ -31,8 +35,8 @@ một kết nối MQTT riêng (username = access token), dùng đúng giao thứ
 Access token và MQTT host lấy từ thingsboard/config.json (nếu có).
 
 Cài thư viện:  pip install -r ../thingsboard/requirements.txt     (paho-mqtt 2.x)
-Chạy:          python simulator.py                         # cả 2 thiết bị, tới khi Ctrl+C
-               python simulator.py --only esp32 --duration 60
+Chạy:          python simulator.py                         # cả 3 thiết bị, tới khi Ctrl+C
+               python simulator.py --only esp32led --duration 60
                python simulator.py --host 192.168.1.100 --interval 2 --errors 0.1
 """
 
@@ -55,7 +59,7 @@ DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "..", "thingsboard", "config.json")
 
 # Dùng khi không đọc được config.json (trùng với thingsboard/config.json)
-FALLBACK_TOKENS = {"esp32": "nhom10-esp32-bh1750", "rpi": "nhom10-rpi-dht11"}
+FALLBACK_TOKENS = {"esp32": "nhom10-esp32-bh1750", "esp32led": "nhom10-esp32-led", "rpi": "nhom10-rpi-dht11"}
 FALLBACK_HOST = "localhost"
 FALLBACK_PORT = 1883
 
@@ -313,37 +317,22 @@ class SimDevice:
 
 
 class SimEsp32(SimDevice):
-    """ESP32 DevKit + BH1750 + 2 LED giả lập."""
+    """ESP32 #1 (DevKit + BH1750) giả lập."""
 
-    tag = "ESP32-sim"
-    client_prefix = "sim-esp32"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.leds = [False, False]  # [LED1, LED2], tắt khi "khởi động" giống firmware
-        self.leds_lock = threading.Lock()
-        self.client.on_message = self._on_rpc
-
-    def on_connected(self):
-        self.client.subscribe(TOPIC_RPC_SUBSCRIBE, qos=1)
-        log(self.tag, f"Đã subscribe {TOPIC_RPC_SUBSCRIBE}")
+    tag = "ESP32-BH1750-sim"
+    client_prefix = "sim-esp32-bh1750"
 
     def attributes(self):
-        with self.leds_lock:
-            led1, led2 = self.leds
         return {
             "board": "ESP32 DevKit (simulator)",
-            "firmware": "lab4-esp32 1.0",
+            "firmware": "lab4-esp32-bh1750 1.1",
             "ip": local_ip(self.host, self.port),
             "mac": "02:00:00:00:4C:04",  # MAC giả (bit "locally administered")
             "sensor": "BH1750",
-            "led1": led1,
-            "led2": led2,
         }
 
     def connect_telemetry(self, event):
-        with self.leds_lock:
-            return {"led1": self.leds[0], "led2": self.leds[1], "event": event}
+        return {"event": event}
 
     def tick(self):
         rssi = max(-90, min(-30, int(round(-58 + self.rng.gauss(0, 3)))))
@@ -361,6 +350,43 @@ class SimEsp32(SimDevice):
             data["event"] = event
         if self.publish_json(TOPIC_TELEMETRY, data) and event:
             self.sensor_event_sent(event)
+
+
+class SimEsp32Led(SimDevice):
+    """ESP32 #2 (DevKit + 2 LED) giả lập."""
+
+    tag = "ESP32-LED-sim"
+    client_prefix = "sim-esp32-led"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.leds = [False, False]  # [LED1, LED2], tắt khi "khởi động" giống firmware
+        self.leds_lock = threading.Lock()
+        self.client.on_message = self._on_rpc
+
+    def on_connected(self):
+        self.client.subscribe(TOPIC_RPC_SUBSCRIBE, qos=1)
+        log(self.tag, f"Đã subscribe {TOPIC_RPC_SUBSCRIBE}")
+
+    def attributes(self):
+        with self.leds_lock:
+            led1, led2 = self.leds
+        return {
+            "board": "ESP32 DevKit (simulator)",
+            "firmware": "lab4-esp32-led 1.1",
+            "ip": local_ip(self.host, self.port),
+            "mac": "02:00:00:00:4C:05",  # MAC giả (bit "locally administered")
+            "led1": led1,
+            "led2": led2,
+        }
+
+    def connect_telemetry(self, event):
+        with self.leds_lock:
+            return {"led1": self.leds[0], "led2": self.leds[1], "event": event}
+
+    def tick(self):
+        rssi = max(-90, min(-30, int(round(-60 + self.rng.gauss(0, 3)))))
+        self.publish_json(TOPIC_TELEMETRY, {"rssi": rssi})
 
     def publish_led_state(self):
         with self.leds_lock:
@@ -467,11 +493,11 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", line_buffering=True)
     parser = argparse.ArgumentParser(
-        description="Lab 4: giả lập ESP32-BH1750 và RaspberryPi-DHT11 (CHỈ ĐỂ KIỂM THỬ)")
+        description="Lab 4: giả lập ESP32-BH1750, ESP32-LED và RaspberryPi-DHT11 (CHỈ ĐỂ KIỂM THỬ)")
     parser.add_argument("--config", default=DEFAULT_CONFIG, help="đường dẫn thingsboard/config.json")
     parser.add_argument("--host", help="MQTT host của ThingsBoard (mặc định TB_HOST hoặc mqtt_host trong config.json)")
     parser.add_argument("--port", type=int, help="cổng MQTT (mặc định mqtt_port trong config.json)")
-    parser.add_argument("--only", choices=("esp32", "rpi"), help="chỉ giả lập một thiết bị")
+    parser.add_argument("--only", choices=("esp32", "esp32led", "rpi"), help="chỉ giả lập một thiết bị")
     parser.add_argument("--interval", type=float, default=5.0, help="chu kỳ gửi telemetry, giây (mặc định 5)")
     parser.add_argument("--duration", type=float, default=0, help="tự dừng sau số giây này (0 = chạy mãi)")
     parser.add_argument("--errors", type=float, default=0.0,
@@ -487,6 +513,8 @@ def main():
     devices = []
     if args.only in (None, "esp32"):
         devices.append(SimEsp32(host, port, tokens["esp32"], args.errors))
+    if args.only in (None, "esp32led"):
+        devices.append(SimEsp32Led(host, port, tokens["esp32led"], args.errors))
     if args.only in (None, "rpi"):
         devices.append(SimRpi(host, port, tokens["rpi"], args.errors))
 

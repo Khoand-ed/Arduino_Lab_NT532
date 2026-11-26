@@ -21,7 +21,11 @@
   "device_profiles": [
     {
       "name": "ESP32-BH1750-Node",
-      "description": "ESP32 DevKit đo ánh sáng bằng BH1750 (GY-302) và điều khiển 2 LED qua RPC"
+      "description": "ESP32 DevKit #1 đo ánh sáng bằng BH1750 (GY-302)"
+    },
+    {
+      "name": "ESP32-LED-Node",
+      "description": "ESP32 DevKit #2 điều khiển 2 LED qua RPC"
     },
     {
       "name": "RPi-DHT11-Node",
@@ -32,10 +36,27 @@
     {
       "key": "esp32",
       "name": "ESP32-BH1750",
-      "label": "ESP32 DevKit (BH1750 + 2 LED)",
+      "label": "ESP32 #1 (BH1750)",
       "profile": "ESP32-BH1750-Node",
       "access_token": "nhom10-esp32-bh1750",
-      "telemetry_keys": ["light", "rssi", "led1", "led2", "event"]
+      "telemetry_keys": [
+        "light",
+        "rssi",
+        "event"
+      ]
+    },
+    {
+      "key": "esp32led",
+      "name": "ESP32-LED",
+      "label": "ESP32 #2 (2 LED)",
+      "profile": "ESP32-LED-Node",
+      "access_token": "nhom10-esp32-led",
+      "telemetry_keys": [
+        "led1",
+        "led2",
+        "rssi",
+        "event"
+      ]
     },
     {
       "key": "rpi",
@@ -43,7 +64,11 @@
       "label": "Raspberry Pi (DHT11)",
       "profile": "RPi-DHT11-Node",
       "access_token": "nhom10-rpi-dht11",
-      "telemetry_keys": ["temperature", "humidity", "event"]
+      "telemetry_keys": [
+        "temperature",
+        "humidity",
+        "event"
+      ]
     }
   ]
 }

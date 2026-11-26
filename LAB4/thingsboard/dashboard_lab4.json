@@ -34,7 +34,7 @@
           "actions": {},
           "settings": {
             "title": "NT532.R12 - Nhóm 10 · Lab 4",
-            "subtitle": "Dashboard IoT: ESP32 (BH1750 + 2 LED) và Raspberry Pi (DHT11) qua MQTT - ThingsBoard CE",
+            "subtitle": "Dashboard IoT: ESP32 #1 (BH1750), ESP32 #2 (2 LED) và Raspberry Pi (DHT11) qua MQTT - ThingsBoard CE",
             "navItems": [
               {
                 "id": "default",
@@ -811,7 +811,7 @@
           "noDataDisplayMessage": "",
           "actions": {},
           "settings": {
-            "label": "Wi-Fi RSSI (ESP32)",
+            "label": "Wi-Fi RSSI (ESP32-BH1750)",
             "units": "dBm",
             "decimals": 0,
             "icon": "network_wifi",
@@ -1048,7 +1048,7 @@
           "configMode": "basic",
           "targetDevice": {
             "type": "entity",
-            "entityAliasId": "3a1d68c3-18fa-587f-b5b4-cce43a6e9287"
+            "entityAliasId": "fb6476e6-9e2e-571d-9d61-b67279be174f"
           },
           "titleColor": null,
           "borderRadius": "12px"
@@ -1243,7 +1243,7 @@
           "borderRadius": "12px",
           "targetDevice": {
             "type": "entity",
-            "entityAliasId": "3a1d68c3-18fa-587f-b5b4-cce43a6e9287"
+            "entityAliasId": "fb6476e6-9e2e-571d-9d61-b67279be174f"
           }
         },
         "row": 6,
@@ -1432,7 +1432,7 @@
           "configMode": "basic",
           "targetDevice": {
             "type": "entity",
-            "entityAliasId": "3a1d68c3-18fa-587f-b5b4-cce43a6e9287"
+            "entityAliasId": "fb6476e6-9e2e-571d-9d61-b67279be174f"
           },
           "titleColor": null,
           "borderRadius": "12px"
@@ -1627,7 +1627,7 @@
           "borderRadius": "12px",
           "targetDevice": {
             "type": "entity",
-            "entityAliasId": "3a1d68c3-18fa-587f-b5b4-cce43a6e9287"
+            "entityAliasId": "fb6476e6-9e2e-571d-9d61-b67279be174f"
           }
         },
         "row": 6,
@@ -2942,6 +2942,7 @@
           "resolveMultiple": true,
           "deviceTypes": [
             "ESP32-BH1750-Node",
+            "ESP32-LED-Node",
             "RPi-DHT11-Node"
           ],
           "deviceNameFilter": ""
@@ -2965,6 +2966,16 @@
           "resolveMultiple": false,
           "entityType": "DEVICE",
           "entityNameFilter": "RaspberryPi-DHT11"
+        }
+      },
+      "fb6476e6-9e2e-571d-9d61-b67279be174f": {
+        "id": "fb6476e6-9e2e-571d-9d61-b67279be174f",
+        "alias": "ESP32-LED",
+        "filter": {
+          "type": "entityName",
+          "resolveMultiple": false,
+          "entityType": "DEVICE",
+          "entityNameFilter": "ESP32-LED"
         }
       }
     },

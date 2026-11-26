@@ -1,20 +1,13 @@
 /**
  * ============================================================================
- * LAB 4 - THIẾT BỊ ESP32: CẢM BIẾN ÁNH SÁNG BH1750 + 2 LED, KẾT NỐI THINGSBOARD
+ * LAB 4 - THIẾT BỊ ESP32 #2: ĐIỀU KHIỂN 2 LED QUA THINGSBOARD (MQTT RPC)
  * Môn học: Công nghệ Internet of Things Hiện đại - UIT (NT532.R12 - Nhóm 10)
  *
  * KỊCH BẢN:
- * - ThingsBoard CE chạy bằng Docker trên laptop (LAB4/server). ESP32 là thiết
- *   bị "ESP32-BH1750", kết nối MQTT tới ThingsBoard (cổng 1883) với
- *   username = access token, không có mật khẩu.
- * - Mỗi 5 giây ESP32 đọc độ sáng từ GY-302 (BH1750) và gửi telemetry
- *   {"light": 123.4, "rssi": -60}. Đọc lỗi thì chỉ gửi {"rssi": -60} và khởi
- *   tạo lại cảm biến; lỗi 3 chu kỳ LIÊN TIẾP mới gửi kèm
- *   {"event": "BH1750 read error"} (lỗi kéo dài thì nhắc lại mỗi 60 giây), đọc
- *   được trở lại thì gửi kèm {"event": "BH1750 recovered"}.
- * - Mỗi lần kết nối (hoặc kết nối lại) MQTT: gửi client attributes (board,
- *   firmware, ip, mac, sensor, led1, led2) và telemetry {"led1", "led2",
- *   "event"} với event = "BOOT" (lần đầu sau khi khởi động) hoặc "MQTT RECONNECT".
+ * - ThingsBoard CE chạy bằng Docker trên laptop (LAB4/server). ESP32 này là thiết
+ *   bị "ESP32-LED", kết nối MQTT tới ThingsBoard (cổng 1883) với
+ *   username = access token, không có mật khẩu. Cảm biến BH1750 nằm ở ESP32 #1
+ *   (sketch Lab4_ESP32_BH1750, thiết bị "ESP32-BH1750").
  * - Dashboard điều khiển 2 LED bằng RPC. ThingsBoard gửi lệnh xuống topic
  *   v1/devices/me/rpc/request/{id}, ESP32 trả lời ở v1/devices/me/rpc/response/{id}:
  *     setLed1, setLed2  params: true/false, 0/1, "on"/"off", {"state": true}...
@@ -25,35 +18,32 @@
  *     lệnh khác         -> {"error": "unknown method"}
  *   Sau mỗi lệnh set*, ESP32 bật/tắt LED ngay rồi gửi lại led1, led2 (client
  *   attributes + telemetry) để dashboard luôn đúng trạng thái thật.
+ * - Mỗi lần kết nối (hoặc kết nối lại) MQTT: gửi client attributes (board,
+ *   firmware, ip, mac, led1, led2) và telemetry {"led1", "led2", "event"} với
+ *   event = "BOOT" (lần đầu sau khi khởi động) hoặc "MQTT RECONNECT".
+ * - Mỗi 5 giây gửi {"rssi": -60} (cường độ Wi-Fi) để dashboard thấy thiết bị
+ *   vẫn đang hoạt động.
  * - Wi-Fi và MQTT tự kết nối lại mà không chặn loop() (MQTT chờ 2, 4, 8...
- *   tối đa 30 giây giữa các lần thử).
+ *   tối đa 30 giây giữa các lần thử). Mất kết nối thì LED giữ nguyên trạng thái.
  *
- * PHẦN CỨNG: 1 ESP32 DevKit, 1 cảm biến ánh sáng GY-302 (BH1750, I2C),
- *            2 LED + 2 điện trở 220 Ohm.
+ * PHẦN CỨNG: 1 ESP32 DevKit, 2 LED + 2 điện trở 220 Ohm.
  *
- * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D21/G21/IO21):
+ * SƠ ĐỒ NỐI DÂY (số GPIO = số in trên board, ví dụ D25/G25/IO25):
  *   Linh kiện         Chân linh kiện                  ESP32       Nhãn trên DevKit
- *   GY-302 (BH1750)   VCC                             3.3V        3V3
- *                     GND                             GND         GND
- *                     SDA                             GPIO21      D21
- *                     SCL                             GPIO22      D22
- *                     ADDR: để trống (địa chỉ I2C 0x23)
  *   LED 1             Anode (chân dài) -> trở 220 Ohm GPIO25      D25
  *                     Cathode (chân ngắn)             GND         GND
  *   LED 2             Anode (chân dài) -> trở 220 Ohm GPIO26      D26
  *                     Cathode (chân ngắn)             GND         GND
  *   Không dùng các chân strapping GPIO0/2/5/12/15.
  *
- * THƯ VIỆN: PubSubClient (Nick O'Leary) 2.8, ArduinoJson (Benoit Blanchon) 7.x,
- *           BH1750 (Christopher Laws) 1.3.x; board "esp32" (Espressif) 3.x
+ * THƯ VIỆN: PubSubClient (Nick O'Leary) 2.8, ArduinoJson (Benoit Blanchon) 7.x;
+ *           board "esp32" (Espressif) 3.x
  * ============================================================================
  */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <Wire.h>
-#include <BH1750.h>
 
 // ============================================================================
 // CẤU HÌNH
@@ -65,25 +55,17 @@ const char *WIFI_PASS = "UiTiOtAP";
 // ipconfig, lấy "IPv4 Address" của card Wi-Fi (cùng mạng với ESP32) thay vào đây.
 const char *TB_HOST = "192.168.1.100";
 const int TB_PORT = 1883;
-// Access token của thiết bị "ESP32-BH1750" (do thingsboard/provision.py tạo)
-const char *ACCESS_TOKEN = "nhom10-esp32-bh1750";
+// Access token của thiết bị "ESP32-LED" (do thingsboard/provision.py tạo)
+const char *ACCESS_TOKEN = "nhom10-esp32-led";
 
 // Thông tin thiết bị gửi lên dưới dạng client attributes
 const char *BOARD_NAME = "ESP32 DevKit";
-const char *FIRMWARE_VERSION = "lab4-esp32 1.0";
-const char *SENSOR_NAME = "BH1750";
+const char *FIRMWARE_VERSION = "lab4-esp32-led 1.1";
 
-// GY-302 dùng I2C mặc định của ESP32
-const int I2C_SDA_PIN = 21;
-const int I2C_SCL_PIN = 22;
 const int LED1_PIN = 25;
 const int LED2_PIN = 26;
 
-const unsigned long TELEMETRY_INTERVAL_MS = 5000;  // chu kỳ đọc cảm biến và gửi
-// Lỗi đọc BH1750: đủ số chu kỳ lỗi liên tiếp mới gửi event (tránh 12 dòng nhật ký
-// mỗi phút khi cảm biến lỏng dây), lỗi kéo dài thì nhắc lại sau mỗi khoảng này
-const int SENSOR_ERROR_THRESHOLD = 3;
-const unsigned long SENSOR_ERROR_REPEAT_MS = 60000;
+const unsigned long TELEMETRY_INTERVAL_MS = 5000;  // chu kỳ gửi rssi
 const unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
 const unsigned long MQTT_RETRY_MIN_MS = 2000;
 const unsigned long MQTT_RETRY_MAX_MS = 30000;
@@ -98,15 +80,10 @@ const uint16_t MQTT_SOCKET_TIMEOUT_S = 5;
 // ============================================================================
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
-BH1750 lightMeter;  // GY-302, địa chỉ I2C 0x23 (chân ADDR để trống)
 
 const int LED_PINS[2] = {LED1_PIN, LED2_PIN};
 bool ledState[2] = {false, false};  // [0] = LED1, [1] = LED2
 
-bool lightSensorReady = false;
-int sensorFailStreak = 0;              // số chu kỳ đọc lỗi liên tiếp
-bool sensorErrorReported = false;      // đã gửi event "BH1750 read error" chưa
-unsigned long sensorErrorReportedAtMs = 0;
 bool bootEventSent = false;  // đã gửi event "BOOT" sau khi khởi động chưa
 
 bool wifiConnected = false;
@@ -359,7 +336,6 @@ void publishDeviceAttributes() {
   doc["firmware"] = FIRMWARE_VERSION;
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
-  doc["sensor"] = SENSOR_NAME;
   doc["led1"] = ledState[0];
   doc["led2"] = ledState[1];
   publishJson(TOPIC_ATTRIBUTES, doc);
@@ -385,69 +361,12 @@ void publishConnectEvent() {
   }
 }
 
-// ============================================================================
-// CẢM BIẾN ÁNH SÁNG BH1750
-// ============================================================================
-// Khởi tạo lại bus I2C và BH1750 ở chế độ đo liên tục độ phân giải cao
-// (1 lx, ~120 ms/lần). Trả về false nếu cảm biến không phản hồi.
-bool reinitLightSensor() {
-  Wire.end();
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  return lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
-}
-
-// Đọc cảm biến, in ra Serial và gửi telemetry (nếu đang kết nối MQTT)
-void sensorCycle() {
-  // Thư viện trả về số âm khi lỗi I2C (sai dây, mất nguồn cảm biến)
-  float lux = lightSensorReady ? lightMeter.readLightLevel() : -1.0f;
-  bool valid = lux >= 0;
-
-  if (valid) {
-    Serial.printf("[BH1750] Ánh sáng = %.1f lx\n", lux);
-  } else {
-    sensorFailStreak++;
-    Serial.printf("[BH1750] Lỗi đọc cảm biến (%d lần liên tiếp), kiểm tra dây SDA/SCL và nguồn 3V3\n",
-                  sensorFailStreak);
-  }
-
+// Gửi cường độ Wi-Fi định kỳ (nếu đang kết nối MQTT)
+void telemetryCycle() {
   if (mqtt.connected()) {
     JsonDocument doc;
-    bool errorEvent = false;
-    bool recoveredEvent = false;
-    if (valid) {
-      doc["light"] = round(lux * 10) / 10.0;  // lux, làm tròn 1 chữ số thập phân
-      if (sensorErrorReported) {
-        doc["event"] = "BH1750 recovered";
-        recoveredEvent = true;
-      }
-    } else {
-      bool due = !sensorErrorReported || millis() - sensorErrorReportedAtMs >= SENSOR_ERROR_REPEAT_MS;
-      if (sensorFailStreak >= SENSOR_ERROR_THRESHOLD && due) {
-        doc["event"] = "BH1750 read error";
-        errorEvent = true;
-      }
-    }
-    // rssi luôn được gửi: cảm biến lỗi thì ESP32 vẫn gửi dữ liệu, vẫn "active"
     doc["rssi"] = WiFi.RSSI();  // dBm
-    if (publishJson(TOPIC_TELEMETRY, doc)) {
-      if (errorEvent) {
-        sensorErrorReported = true;
-        sensorErrorReportedAtMs = millis();
-      }
-      if (recoveredEvent) {
-        sensorErrorReported = false;
-      }
-    }
-  } else {
-    Serial.println("[MQTT] Chưa kết nối ThingsBoard, chưa gửi được số liệu");
-  }
-
-  if (valid) {
-    sensorFailStreak = 0;
-  } else {
-    lightSensorReady = reinitLightSensor();
-    Serial.println(lightSensorReady ? "[BH1750] Khởi tạo lại thành công"
-                                    : "[BH1750] Khởi tạo lại thất bại, thử lại ở chu kỳ sau");
+    publishJson(TOPIC_TELEMETRY, doc);
   }
 }
 
@@ -516,7 +435,7 @@ const char *mqttStateText(int state) {
 
 bool connectMqtt() {
   // Client id lấy theo địa chỉ MAC để không trùng giữa các board
-  String clientId = "esp32-" + WiFi.macAddress();
+  String clientId = "esp32-led-" + WiFi.macAddress();
   clientId.replace(":", "");
 
   Serial.printf("[MQTT] Kết nối ThingsBoard %s:%d (client id %s)... ", TB_HOST, TB_PORT,
@@ -536,7 +455,7 @@ bool connectMqtt() {
   }
   publishDeviceAttributes();
   publishConnectEvent();
-  // Gửi số liệu cảm biến ngay ở vòng loop kế tiếp, không chờ hết chu kỳ
+  // Gửi rssi ngay ở vòng loop kế tiếp, không chờ hết chu kỳ
   lastTelemetryMs = millis() - TELEMETRY_INTERVAL_MS;
   return true;
 }
@@ -605,17 +524,12 @@ void maintainMqtt(unsigned long now) {
 void setup() {
   Serial.begin(115200);
   Serial.println();
-  Serial.println("=== LAB 4 - ESP32 + BH1750 + 2 LED -> ThingsBoard (MQTT) ===");
+  Serial.println("=== LAB 4 - ESP32 #2: 2 LED <- ThingsBoard (MQTT RPC) ===");
 
   for (int i = 0; i < 2; i++) {
     pinMode(LED_PINS[i], OUTPUT);
   }
   applyLeds();
-
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  lightSensorReady = lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
-  Serial.println(lightSensorReady ? "[BH1750] Đã khởi tạo GY-302 (I2C 0x23)"
-                                  : "[BH1750] Không tìm thấy GY-302, kiểm tra dây SDA/SCL (sẽ thử lại)");
 
   mqtt.setServer(TB_HOST, TB_PORT);
   mqtt.setCallback(onMqttMessage);
@@ -645,6 +559,6 @@ void loop() {
 
   if (millis() - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
     lastTelemetryMs = millis();
-    sensorCycle();
+    telemetryCycle();
   }
 }

@@ -6,7 +6,7 @@
 >
 > **IoT platform:** **ThingsBoard Community Edition 4.3.1.8** (mã nguồn mở, Apache 2.0) chạy **local bằng Docker** trên laptop.
 >
-> **Thiết bị:** **ESP32 DevKit** (đóng vai Wemos D1 trong đề) + cảm biến ánh sáng **BH1750 (GY-302)** + 2 LED, và **Raspberry Pi** + **DHT11**. Cả hai gửi dữ liệu bằng **MQTT**.
+> **Thiết bị (3):** **ESP32 #1** + cảm biến ánh sáng **BH1750 (GY-302)**, **ESP32 #2** + 2 LED (2 ESP32 DevKit đóng vai Wemos D1 trong đề), và **Raspberry Pi** + **DHT11**. Tất cả kết nối bằng **MQTT**.
 
 ---
 
@@ -15,7 +15,7 @@
 2. [Cấu trúc thư mục](#2-cấu-trúc-thư-mục)
 3. [Triển khai ThingsBoard bằng Docker (yêu cầu 6)](#3-triển-khai-thingsboard-bằng-docker-yêu-cầu-6)
 4. [Khởi tạo ThingsBoard: tenant, thiết bị, rule chain, dashboard](#4-khởi-tạo-thingsboard-tenant-thiết-bị-rule-chain-dashboard)
-5. [ESP32 + BH1750 + 2 LED (yêu cầu 1, 3)](#5-esp32--bh1750--2-led-yêu-cầu-1-3)
+5. [Hai ESP32: BH1750 và 2 LED (yêu cầu 1, 3)](#5-hai-esp32-bh1750-và-2-led-yêu-cầu-1-3)
 6. [Raspberry Pi + DHT11 (yêu cầu 1)](#6-raspberry-pi--dht11-yêu-cầu-1)
 7. [Dashboard (yêu cầu 2, 3, 4)](#7-dashboard-yêu-cầu-2-3-4)
 8. [Logs, lọc và tải dữ liệu (yêu cầu 5, 7)](#8-logs-lọc-và-tải-dữ-liệu-yêu-cầu-5-7)
@@ -42,9 +42,12 @@ Phần "cá nhân hóa" do nhóm tự làm:
 ### 1.2. Mô hình App UI – API – Database (Hình 1 trong đề) ánh xạ sang ThingsBoard
 
 ```
- ┌──────────────────────┐   MQTT :1883 (telemetry, attributes, RPC)
- │ ESP32 + BH1750 + 2LED│◄──────────────────────────────┐
- └──────────────────────┘                                │
+ ┌──────────────────────┐   MQTT :1883 (telemetry)
+ │ ESP32 #1 + BH1750    │──────────────────────────────┐
+ └──────────────────────┘                              │
+ ┌──────────────────────┐   MQTT :1883 (RPC bật/tắt LED, trạng thái LED)
+ │ ESP32 #2 + 2 LED     │◄──────────────────────────────┐
+ └──────────────────────┘                              │ │
  ┌──────────────────────┐   MQTT :1883 (telemetry)       │
  │ Raspberry Pi + DHT11 │──────────────────────────────┐ │
  └──────────────────────┘                              ▼ │
@@ -67,9 +70,9 @@ Phần "cá nhân hóa" do nhóm tự làm:
 
 | # | Yêu cầu | Thực hiện | Vị trí |
 | :---: | :--- | :--- | :--- |
-| 1 | Device gửi dữ liệu qua MQTT, lưu trên platform | ESP32 gửi `light` (lx), Raspberry Pi gửi `temperature`, `humidity` mỗi 5 s. ThingsBoard lưu vào PostgreSQL | `esp32/`, `raspberry/` |
-| 2 | Dashboard trạng thái thiết bị (≥ 2 thiết bị) | Màn hình **Thiết bị**: tổng số thiết bị và số online/offline, bảng Online/Offline, các mốc kết nối/ngắt/hoạt động, IP, bo mạch | `dashboard_lab4.json` |
-| 3 | Màn hình chính: giá trị hiện tại + điều khiển 2 LED theo thời gian thực | Màn hình **Màn hình chính**: thẻ Nhiệt độ / Độ ẩm / Ánh sáng / RSSI, 2 công tắc LED (RPC qua MQTT), trạng thái LED do ESP32 báo về | `dashboard_lab4.json`, firmware ESP32 |
+| 1 | Device gửi dữ liệu qua MQTT, lưu trên platform | ESP32 #1 gửi `light` (lx), Raspberry Pi gửi `temperature`, `humidity` mỗi 5 s. ESP32 #2 báo trạng thái `led1`, `led2`. ThingsBoard lưu vào PostgreSQL | `esp32/`, `raspberry/` |
+| 2 | Dashboard trạng thái thiết bị (≥ 2 thiết bị, ở đây là 3) | Màn hình **Thiết bị**: tổng số thiết bị và số online/offline, bảng Online/Offline, các mốc kết nối/ngắt/hoạt động, IP, bo mạch | `dashboard_lab4.json` |
+| 3 | Màn hình chính: giá trị hiện tại + điều khiển 2 LED theo thời gian thực | Màn hình **Màn hình chính**: thẻ Nhiệt độ / Độ ẩm / Ánh sáng / RSSI, 2 công tắc LED của ESP32 #2 (RPC qua MQTT), trạng thái LED do ESP32 #2 báo về | `dashboard_lab4.json`, `esp32/Lab4_ESP32_LED` |
 | 4 | Biểu đồ 3 đại lượng theo thời gian thực | Màn hình **Biểu đồ**: 3 biểu đồ time series realtime | `dashboard_lab4.json` |
 | 5 | Logs: ID thiết bị, tên thiết bị, tên giá trị, giá trị, thời gian | Màn hình **Logs**: widget tự viết, mỗi dòng là một giá trị nhận được hoặc một sự kiện hệ thống | widget `nhom10_lab4_logs`, rule chain |
 | 6 | Triển khai platform ở local bằng Docker | `docker compose` gồm ThingsBoard + PostgreSQL | `server/docker-compose.yml` |
@@ -93,25 +96,26 @@ LAB4/
 │   └── widgets/
 │       └── nhom10_lab4_widgets_bundle.json   # 4 widget tự viết
 ├── esp32/
-│   └── Lab4_ESP32/Lab4_ESP32.ino      # Firmware ESP32: BH1750 + 2 LED + RPC
+│   ├── Lab4_ESP32_BH1750/Lab4_ESP32_BH1750.ino  # ESP32 #1: đọc BH1750, gửi light
+│   └── Lab4_ESP32_LED/Lab4_ESP32_LED.ino        # ESP32 #2: nhận RPC, bật/tắt 2 LED
 ├── raspberry/                         # Chép sang Raspberry Pi
 │   ├── dht11_thingsboard.py           # Đọc DHT11, gửi lên ThingsBoard
 │   ├── requirements.txt
 │   └── lab4-dht11.service             # Dịch vụ systemd (chạy khi Pi khởi động)
 └── tools/
-    └── simulator.py                   # Giả lập 2 thiết bị (CHỈ để kiểm thử)
+    └── simulator.py                   # Giả lập 3 thiết bị (CHỈ để kiểm thử)
 ```
 
 **Thông số dùng chung** (mọi file phải thống nhất):
 
-| | ESP32 | Raspberry Pi |
-| :--- | :--- | :--- |
-| Tên device | `ESP32-BH1750` | `RaspberryPi-DHT11` |
-| Device profile | `ESP32-BH1750-Node` | `RPi-DHT11-Node` |
-| Access token (username MQTT) | `nhom10-esp32-bh1750` | `nhom10-rpi-dht11` |
-| Telemetry | `light` (lx), `rssi` (dBm), `led1`, `led2`, `event` | `temperature` (°C), `humidity` (%), `event` |
-| Client attributes | `board`, `firmware`, `ip`, `mac`, `sensor`, `led1`, `led2` | `board`, `hostname`, `ip`, `sensor`, `gpio`, `firmware` |
-| RPC | `setLed1`, `setLed2`, `getLed1`, `getLed2`, `setLed`, `getLeds` | – |
+| | ESP32 #1 | ESP32 #2 | Raspberry Pi |
+| :--- | :--- | :--- | :--- |
+| Tên device | `ESP32-BH1750` | `ESP32-LED` | `RaspberryPi-DHT11` |
+| Device profile | `ESP32-BH1750-Node` | `ESP32-LED-Node` | `RPi-DHT11-Node` |
+| Access token (username MQTT) | `nhom10-esp32-bh1750` | `nhom10-esp32-led` | `nhom10-rpi-dht11` |
+| Telemetry | `light` (lx), `rssi` (dBm), `event` | `led1`, `led2`, `rssi`, `event` | `temperature` (°C), `humidity` (%), `event` |
+| Client attributes | `board`, `firmware`, `ip`, `mac`, `sensor` | `board`, `firmware`, `ip`, `mac`, `led1`, `led2` | `board`, `hostname`, `ip`, `sensor`, `gpio`, `firmware` |
+| RPC | – | `setLed1`, `setLed2`, `getLed1`, `getLed2`, `setLed`, `getLeds` | – |
 
 Topic MQTT đều theo chuẩn của ThingsBoard:
 - `v1/devices/me/telemetry`: gửi số liệu.
@@ -159,7 +163,7 @@ Một số điểm trong `docker-compose.yml`:
 - **`DEFAULT_STATE_CHECK_INTERVAL: 10`:** ThingsBoard kiểm tra trạng thái thiết bị mỗi 10 s thay cho mặc định 60 s. Nhờ đó Online/Offline trên dashboard đổi nhanh hơn.
 
 ### 3.3. Cho ESP32 và Raspberry Pi kết nối vào laptop
-1. Laptop, ESP32 và Raspberry Pi phải cùng một mạng Wi-Fi, ví dụ `UiTiOt-E3.1`.
+1. Laptop, 2 ESP32 và Raspberry Pi phải cùng một mạng Wi-Fi, ví dụ `UiTiOt-E3.1`.
 2. Lấy IP của laptop: chạy `ipconfig` rồi xem dòng **IPv4 Address** của card **Wi-Fi**, ví dụ `172.31.9.36`. Thiết bị phải dùng IP này, **không dùng `localhost`**.
 3. Mở firewall cho cổng 1883 và 8080. Mở **PowerShell bằng quyền Administrator** và chạy:
    ```powershell
@@ -193,8 +197,8 @@ Script chạy 7 bước, lấy thông số từ `config.json`:
 | Bước | Làm gì |
 | :---: | :--- |
 | 1 | Đăng nhập sysadmin, tạo tenant **NT532.R12 - Nhom 10** và tài khoản tenant admin `nhom10@nt532.local`. Tài khoản được kích hoạt luôn bằng mật khẩu trong `config.json`, không cần mail |
-| 2 | Tạo 2 device profile `ESP32-BH1750-Node`, `RPi-DHT11-Node` |
-| 3 | Tạo 2 device với access token cố định. Đặt server attribute `inactivityTimeout = 30000` ms |
+| 2 | Tạo 3 device profile `ESP32-BH1750-Node`, `ESP32-LED-Node`, `RPi-DHT11-Node` |
+| 3 | Tạo 3 device (`ESP32-BH1750`, `ESP32-LED`, `RaspberryPi-DHT11`) với access token cố định. Đặt server attribute `inactivityTimeout = 30000` ms |
 | 4 | Bổ sung **Root Rule Chain** (giữ nguyên các luồng mặc định) để ghi nhật ký hệ thống, xem 4.3 |
 | 5 | Nạp widgets bundle **"Nhom 10 - Lab 4"** (4 widget tự viết) |
 | 6 | Nạp dashboard **"Lab 4 - IoT Dashboard (Nhom 10)"** và đặt làm **home dashboard** của tenant |
@@ -233,17 +237,31 @@ Vì sao tách 2 key: ThingsBoard chỉ giữ **một giá trị cho mỗi (thi�
 
 ---
 
-## 5. ESP32 + BH1750 + 2 LED (YÊU CẦU 1, 3)
+## 5. HAI ESP32: BH1750 VÀ 2 LED (YÊU CẦU 1, 3)
+
+Hệ thống dùng **2 board ESP32 DevKit**. Mỗi board có một sketch và một access token riêng:
+
+| Board | Sketch | Device trên ThingsBoard | Việc |
+| :--- | :--- | :--- | :--- |
+| ESP32 #1 | `esp32/Lab4_ESP32_BH1750/Lab4_ESP32_BH1750.ino` | `ESP32-BH1750` | Đọc ánh sáng, gửi `light` mỗi 5 s |
+| ESP32 #2 | `esp32/Lab4_ESP32_LED/Lab4_ESP32_LED.ino` | `ESP32-LED` | Nhận lệnh RPC, bật/tắt 2 LED |
 
 ### 5.1. Linh kiện & nối dây
 
+**ESP32 #1 + GY-302 (BH1750):**
+
+| Chân GY-302 | ESP32 | Nhãn trên DevKit |
+| :--- | :--- | :--- |
+| VCC | 3.3V | 3V3 |
+| GND | GND | GND |
+| SDA | GPIO21 | D21 |
+| SCL | GPIO22 | D22 |
+| ADDR | để trống (địa chỉ I2C 0x23) | – |
+
+**ESP32 #2 + 2 LED:**
+
 | Linh kiện | Chân linh kiện | ESP32 | Nhãn trên DevKit |
 | :--- | :--- | :--- | :--- |
-| GY-302 (BH1750) | VCC | 3.3V | 3V3 |
-| | GND | GND | GND |
-| | SDA | GPIO21 | D21 |
-| | SCL | GPIO22 | D22 |
-| | ADDR | để trống (địa chỉ I2C 0x23) | – |
 | LED 1 | Anode (chân dài) → trở 220 Ω | GPIO25 | D25 |
 | | Cathode (chân ngắn) | GND | GND |
 | LED 2 | Anode (chân dài) → trở 220 Ω | GPIO26 | D26 |
@@ -254,36 +272,53 @@ Không dùng các chân strapping GPIO0, 2, 5, 12, 15.
 ### 5.2. Arduino IDE
 1. Cài board: **Boards Manager** → **esp32** (Espressif), đã thử với bản 3.3.12. Chọn **Tools → Board → ESP32 Dev Module**.
 2. Cài thư viện trong **Library Manager**:
-   - **PubSubClient** (Nick O'Leary) 2.8
-   - **ArduinoJson** (Benoit Blanchon) 7.x
-   - **BH1750** (Christopher Laws) 1.3.x
-3. Mở `esp32/Lab4_ESP32/Lab4_ESP32.ino` và sửa phần **CẤU HÌNH**:
+   - **PubSubClient** (Nick O'Leary) 2.8: cả 2 sketch
+   - **ArduinoJson** (Benoit Blanchon) 7.x: cả 2 sketch
+   - **BH1750** (Christopher Laws) 1.3.x: chỉ ESP32 #1
+3. Ở **mỗi** sketch, sửa phần **CẤU HÌNH**:
    - `WIFI_SSID`, `WIFI_PASS`
    - `TB_HOST` = **IP Wi-Fi của laptop** (mục 3.3)
-   - `ACCESS_TOKEN` để nguyên `nhom10-esp32-bh1750`, trừ khi nhóm đổi trong `config.json`
-4. Nạp code và mở Serial Monitor ở tốc độ **115200**.
+   - `ACCESS_TOKEN` để nguyên: `nhom10-esp32-bh1750` cho ESP32 #1, `nhom10-esp32-led` cho ESP32 #2
+4. Nạp code cho từng board:
+   - Cắm ESP32 #1, chọn đúng cổng COM, nạp `Lab4_ESP32_BH1750`.
+   - Cắm ESP32 #2, chọn cổng COM của nó, nạp `Lab4_ESP32_LED`.
+   - **Không nạp nhầm**, vì 2 board dùng 2 token khác nhau.
+5. Mở Serial Monitor ở tốc độ **115200** cho từng board. Arduino IDE 2 cho mở 2 cửa sổ, mỗi cửa sổ một cổng.
 
 ### 5.3. Cách hoạt động
+**ESP32 #1 (BH1750):**
 - **Mỗi 5 giây:** đọc BH1750 rồi gửi `{"light": 123.4, "rssi": -60}`.
   - Nếu đọc lỗi thì chỉ gửi `rssi` và khởi tạo lại cảm biến.
   - Lỗi **3 chu kỳ liên tiếp** mới gửi event `BH1750 read error`; lỗi kéo dài thì nhắc lại mỗi 60 s.
+- **Khi kết nối MQTT:** gửi client attributes (`board`, `firmware`, `ip`, `mac`, `sensor`) và event `BOOT` (lần đầu sau khi khởi động) hoặc `MQTT RECONNECT`.
+
+**ESP32 #2 (2 LED):**
 - **Khi kết nối MQTT:**
-  - Gửi client attributes (`board`, `firmware`, `ip`, `mac`, `sensor`, `led1`, `led2`).
-  - Gửi event `BOOT` (lần đầu sau khi khởi động) hoặc `MQTT RECONNECT`.
+  - Subscribe `v1/devices/me/rpc/request/+`.
+  - Gửi client attributes (`board`, `firmware`, `ip`, `mac`, `led1`, `led2`).
+  - Gửi event `BOOT` hoặc `MQTT RECONNECT`.
+- **Mỗi 5 giây:** gửi `{"rssi": -60}` để dashboard thấy board vẫn đang hoạt động.
 - **Điều khiển LED bằng RPC:**
   1. Bấm công tắc trên dashboard.
   2. ThingsBoard gửi lệnh xuống topic `v1/devices/me/rpc/request/{id}`, ví dụ `{"method":"setLed1","params":true}`.
-  3. ESP32 bật LED ngay và trả lời trên `.../rpc/response/{id}`.
-  4. ESP32 gửi lại `led1` và `led2` (attributes + telemetry). Dashboard dựa vào đó để hiện **trạng thái thật** của LED.
-- **Mất Wi-Fi hoặc MQTT:** ESP32 tự kết nối lại mà không chặn `loop()`. Thời gian chờ giữa các lần thử MQTT là 2, 4, 8... tối đa 30 s.
+  3. ESP32 #2 bật LED ngay và trả lời trên `.../rpc/response/{id}`.
+  4. ESP32 #2 gửi lại `led1` và `led2` (attributes + telemetry). Dashboard dựa vào đó để hiện **trạng thái thật** của LED.
+
+**Cả hai board:** mất Wi-Fi hoặc MQTT thì tự kết nối lại mà không chặn `loop()`. Thời gian chờ giữa các lần thử MQTT là 2, 4, 8... tối đa 30 s.
 
 Serial Monitor khi chạy đúng có dạng:
 ```
-[WiFi] Đang kết nối UiTiOt-E3.1...
+=== LAB 4 - ESP32 #1: BH1750 -> ThingsBoard (MQTT) ===
 [WiFi] Đã kết nối UiTiOt-E3.1, IP = 172.31.9.52, RSSI = -58 dBm
 [MQTT] Kết nối ThingsBoard 172.31.9.36:1883 (client id ...)... thành công
 [BH1750] Ánh sáng = 245.8 lx
+```
+```
+=== LAB 4 - ESP32 #2: 2 LED <- ThingsBoard (MQTT RPC) ===
+[MQTT] Kết nối ThingsBoard 172.31.9.36:1883 (client id ...)... thành công
+[MQTT] Đã subscribe v1/devices/me/rpc/request/+
 [RPC] #12 setLed1(true)
+[LED] LED1 = BẬT, LED2 = TẮT
 ```
 
 ---
@@ -352,7 +387,7 @@ journalctl -u lab4-dht11 -f
 Khi nào thiết bị Online/Offline:
 - **Online** ngay khi thiết bị kết nối MQTT và gửi dữ liệu.
 - **Offline** khoảng **30–40 s** sau khi thiết bị mất điện, mất Wi-Fi hoặc dừng chương trình (`inactivityTimeout` 30 s, kiểm tra mỗi 10 s).
-- Thiết bị **còn giữ kết nối MQTT** thì vẫn Online dù không gửi số liệu, vì gói keepalive cũng được tính là hoạt động. Muốn demo Offline thì rút nguồn ESP32 hoặc dừng script trên Pi.
+- Thiết bị **còn giữ kết nối MQTT** thì vẫn Online dù không gửi số liệu, vì gói keepalive cũng được tính là hoạt động. Muốn demo Offline thì rút nguồn một ESP32 hoặc dừng script trên Pi.
 
 ### 7.2. "Màn hình chính" (yêu cầu 3)
 - **4 thẻ giá trị** (widget tự viết): Nhiệt độ (°C), Độ ẩm (%), Ánh sáng (lx), Wi-Fi RSSI (dBm). Mỗi thẻ hiện:
@@ -361,10 +396,10 @@ Khi nào thiết bị Online/Offline:
   - chip Online/Offline của thiết bị.
   
   Quá 30 s không có dữ liệu mới thì thẻ chuyển xám, báo "dữ liệu cũ".
-- **2 công tắc LED** (Single switch):
+- **2 công tắc LED** (Single switch), điều khiển ESP32 #2 (`ESP32-LED`):
   - Bấm thì gửi RPC `setLed1` / `setLed2` với tham số `true` / `false`.
-  - Trạng thái công tắc lấy từ attribute `led1` / `led2` do ESP32 báo về, nên luôn phản ánh trạng thái thật.
-  - Khi ESP32 offline, công tắc bị khóa và ô trạng thái LED chuyển xám, chỉ hiện trạng thái cuối cùng ESP32 đã báo.
+  - Trạng thái công tắc lấy từ attribute `led1` / `led2` do ESP32 #2 báo về, nên luôn phản ánh trạng thái thật.
+  - Khi ESP32 #2 offline, công tắc bị khóa và ô trạng thái LED chuyển xám, chỉ hiện trạng thái cuối cùng nó đã báo.
 
 **Vì sao cập nhật được theo thời gian thực:** dữ liệu đi từ thiết bị qua MQTT vào ThingsBoard. Rule engine lưu vào PostgreSQL, đồng thời đẩy qua **WebSocket** tới trình duyệt. Dashboard cập nhật ngay mà không cần tải lại trang.
 
@@ -372,9 +407,9 @@ Khi nào thiết bị Online/Offline:
 1. Bấm công tắc trên dashboard.
 2. Dashboard gọi REST `POST /api/rpc/oneway/{deviceId}`.
 3. Lệnh đi qua rule engine, node *RPC Call Request*.
-4. ThingsBoard gửi lệnh xuống ESP32 qua MQTT `v1/devices/me/rpc/request/{id}`.
-5. ESP32 bật hoặc tắt LED.
-6. ESP32 gửi lại `led1` / `led2`, ô trạng thái trên dashboard đổi theo.
+4. ThingsBoard gửi lệnh xuống ESP32 #2 qua MQTT `v1/devices/me/rpc/request/{id}`.
+5. ESP32 #2 bật hoặc tắt LED.
+6. ESP32 #2 gửi lại `led1` / `led2`, ô trạng thái trên dashboard đổi theo.
 
 ### 7.3. "Biểu đồ" (yêu cầu 4)
 3 biểu đồ time series: Nhiệt độ, Độ ẩm (RaspberryPi-DHT11) và Ánh sáng (ESP32-BH1750).
@@ -386,11 +421,11 @@ Khi nào thiết bị Online/Offline:
 
 ## 8. LOGS, LỌC VÀ TẢI DỮ LIỆU (YÊU CẦU 5, 7)
 
-Màn hình **Logs** dùng widget tự viết `nhom10_lab4_logs`. Widget lấy toàn bộ telemetry của 2 thiết bị (`temperature`, `humidity`, `light`, `rssi`, `led1`, `led2`, `sysEvent`, `event`) và trải ra dạng **mỗi giá trị một dòng**:
+Màn hình **Logs** dùng widget tự viết `nhom10_lab4_logs`. Widget lấy toàn bộ telemetry của 3 thiết bị (`temperature`, `humidity`, `light`, `rssi`, `led1`, `led2`, `sysEvent`, `event`) và trải ra dạng **mỗi giá trị một dòng**:
 
 | Thời gian nhận | ID thiết bị | Tên thiết bị | Tên giá trị | Giá trị |
 | :--- | :--- | :--- | :--- | :--- |
-| 26/11/2026 13:33:25 | f637d650-… | ESP32-BH1750 | sysEvent (Sự kiện hệ thống) | RPC setLed1(true) |
+| 26/11/2026 13:33:25 | a26eea70-… | ESP32-LED | sysEvent (Sự kiện hệ thống) | RPC setLed1(true) |
 | 26/11/2026 13:33:20 | f676b410-… | RaspberryPi-DHT11 | temperature (Nhiệt độ) | 28.3 |
 
 - **ID thiết bị** là UUID của device trong ThingsBoard. Dòng mới nhất nằm trên cùng; có phân trang và đếm số dòng.
@@ -412,8 +447,8 @@ Màn hình **Logs** dùng widget tự viết `nhom10_lab4_logs`. Widget lấy to
 cd LAB4
 .venv\Scripts\python tools/simulator.py --host localhost --duration 300
 ```
-Lệnh trên giả lập cả 2 thiết bị trong 5 phút. Các tùy chọn khác:
-- `--only esp32` hoặc `--only rpi`: chỉ giả lập một thiết bị.
+Lệnh trên giả lập cả 3 thiết bị trong 5 phút. Các tùy chọn khác:
+- `--only esp32` (BH1750), `--only esp32led` (2 LED) hoặc `--only rpi`: chỉ giả lập một thiết bị.
 - `--errors 1`: giả lập cảm biến lỗi để thử các dòng `read error` trong Logs.
 
 Chạy thử script Raspberry Pi trên laptop với cảm biến giả:
@@ -424,7 +459,8 @@ Chạy thử script Raspberry Pi trên laptop với cảm biến giả:
 Bộ giả lập dùng **chung access token** với thiết bị thật. **Không chạy bộ giả lập khi ESP32 hoặc Pi thật đang online**, nếu không hai bên sẽ tranh nhau một device.
 
 Kết quả nhóm đã kiểm thử với ThingsBoard local:
-- 2 thiết bị Online khi chạy, chuyển Offline khoảng 35 s sau khi dừng.
+- 3 thiết bị Online khi chạy, chuyển Offline khoảng 35 s sau khi dừng.
+- RPC `setLed2(true)` tới `ESP32-LED` trả `200 true`. Gửi nhầm lệnh LED sang `ESP32-BH1750` thì bị timeout (504), vì board này không xử lý RPC.
 - RPC `setLed1(true)` trả `200 true`.
 - Logs ghi đủ `CONNECTED`, `ACTIVE`, `BOOT`, `RPC setLed1(true)`, `RPC OK: true`, `RPC DELIVERED`, `DISCONNECTED`, `INACTIVE`.
 
@@ -437,21 +473,21 @@ Kết quả nhóm đã kiểm thử với ThingsBoard local:
 | 1 | 6 | Terminal chạy `docker compose ps` + Docker Desktop | 2 container `thingsboard-ce` và `postgres` (healthy) đang chạy |
 | 2 | 6 | Trang đăng nhập `http://localhost:8080` | ThingsBoard chạy local |
 | 3 | 6 | Terminal chạy `provision.py` | Các bước `[+]` / `[=]`, bảng tóm tắt |
-| 4 | 1 | **Entities → Devices** | 2 device, device profile, trạng thái Active |
-| 5 | 1 | Mạch thật ESP32 + BH1750 + 2 LED | Dây nối đúng bảng 5.1 |
-| 6 | 1 | Serial Monitor của ESP32 | Kết nối Wi-Fi/MQTT thành công, giá trị lux, lệnh RPC |
+| 4 | 1 | **Entities → Devices** | 3 device, device profile, trạng thái Active |
+| 5 | 1 | Mạch thật ESP32 #1 + BH1750 và ESP32 #2 + 2 LED | Dây nối đúng các bảng ở 5.1 |
+| 6 | 1 | Serial Monitor của 2 ESP32 | Kết nối Wi-Fi/MQTT thành công; #1 in giá trị lux, #2 in lệnh RPC |
 | 7 | 1 | Mạch thật Raspberry Pi + DHT11 | Dây nối đúng bảng 6.1 |
 | 8 | 1 | Terminal trên Pi (hoặc `journalctl`) | Nhiệt độ, độ ẩm gửi mỗi 5 s |
 | 9 | 1 | Device → tab **Latest telemetry** của từng thiết bị | Dữ liệu đã được lưu trên platform |
 | 10 | 4.3 | **Root Rule Chain** | Các node `Lab4 ...` nối từ Message Type Switch |
-| 11 | 2 | Dashboard, màn hình **Thiết bị** | 2/2 Online, bảng trạng thái |
-| 12 | 2 | Màn hình **Thiết bị** sau khi rút nguồn ESP32 khoảng 40 s | ESP32 Offline, sự kiện `DISCONNECTED` / `INACTIVE` |
+| 11 | 2 | Dashboard, màn hình **Thiết bị** | 3/3 Online, bảng trạng thái |
+| 12 | 2 | Màn hình **Thiết bị** sau khi rút nguồn một ESP32 khoảng 40 s | Board đó Offline, sự kiện `DISCONNECTED` / `INACTIVE` |
 | 13 | 3 | **Màn hình chính** | 4 thẻ giá trị đang cập nhật |
-| 14 | 3 | Bật LED 1 trên dashboard + ảnh mạch thật cùng lúc | Công tắc ON, ô trạng thái "ĐANG BẬT", LED thật sáng |
+| 14 | 3 | Bật LED 1 trên dashboard + ảnh mạch ESP32 #2 cùng lúc | Công tắc ON, ô trạng thái "ĐANG BẬT", LED thật sáng |
 | 15 | 3 | Như ảnh 14 với LED 2 (hoặc quay video ngắn) | Điều khiển realtime |
 | 16 | 4 | Màn hình **Biểu đồ** | 3 biểu đồ có dữ liệu theo thời gian |
 | 17 | 5 | Màn hình **Logs** | Đủ cột ID / tên thiết bị / tên giá trị / giá trị / thời gian, có cả `sysEvent` |
-| 18 | 7 | Logs đã lọc (ví dụ thiết bị = ESP32, giá trị = light) | Bộ lọc và số dòng đã lọc |
+| 18 | 7 | Logs đã lọc (ví dụ thiết bị = ESP32-BH1750, giá trị = light) | Bộ lọc và số dòng đã lọc |
 | 19 | 7 | File CSV và Excel vừa tải, mở bằng Excel | Đúng các dòng đã lọc, tiếng Việt hiển thị đúng |
 
 ---
@@ -464,8 +500,9 @@ Kết quả nhóm đã kiểm thử với ThingsBoard local:
 | MQTT báo `Not authorized` / `bad user name or password` | Access token gõ sai, hoặc chưa chạy `provision.py`. Kiểm tra trong **Devices → Manage credentials** |
 | Thiết bị gửi được nhưng dashboard vẫn Offline | Đợi 10–20 s. Kiểm tra device có `inactivityTimeout` = 30000 (tab Attributes, Server attributes) |
 | Đã tắt thiết bị nhưng vẫn Online | Bình thường trong 30–40 s đầu. Thiết bị còn kết nối MQTT thì vẫn Online (xem 7.1) |
-| Công tắc LED bị khóa | ESP32 đang offline. Bật ESP32 và đợi kết nối |
-| Bấm LED nhưng log báo `RPC FAILED: NO_ACTIVE_CONNECTION` | ESP32 không kết nối vào ThingsBoard lúc gửi lệnh |
+| Công tắc LED bị khóa | ESP32 #2 (`ESP32-LED`) đang offline. Bật board và đợi kết nối |
+| Bấm LED nhưng log báo `RPC FAILED: NO_ACTIVE_CONNECTION` | ESP32 #2 không kết nối vào ThingsBoard lúc gửi lệnh |
+| 2 ESP32 lúc online lúc offline luân phiên | Nạp nhầm cùng một sketch (cùng token) cho cả 2 board. ThingsBoard chỉ giữ 1 kết nối cho mỗi token nên 2 board đá nhau ra. Nạp đúng sketch cho từng board |
 | Pi báo `DHT11 read error` liên tục | Kiểm tra dây DATA ở GPIO4 (Pin 7) và nguồn 3.3V. Thử `--pulseio`. Chạy lại bước kiểm tra ở mục 6.2 |
 | `error: externally-managed-environment` khi `pip install` trên Pi | Chưa vào venv. Chạy `source .venv/bin/activate` (mục 6.2) |
 | Cổng 1883 đã bị chiếm khi `docker compose up` | Mosquitto của Lab 3 đang chạy trên laptop. Tắt dịch vụ `mosquitto` |

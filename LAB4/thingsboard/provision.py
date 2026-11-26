@@ -4,8 +4,9 @@ LAB 4 - KHỞI TẠO THINGSBOARD CHO NHÓM (chạy trên máy tính, sau khi Doc
 Cấu hình tự động ThingsBoard CE chạy local (Docker) qua REST API, theo config.json:
   1. Đăng nhập sysadmin, tạo tenant "NT532.R12 - Nhom 10" và tài khoản tenant admin,
      kích hoạt luôn bằng mật khẩu trong config.json (không cần gửi mail).
-  2. Đăng nhập tenant admin, tạo 2 device profile: ESP32-BH1750-Node, RPi-DHT11-Node.
-  3. Tạo 2 device với access token cố định (ESP32-BH1750, RaspberryPi-DHT11) và đặt
+  2. Đăng nhập tenant admin, tạo 3 device profile: ESP32-BH1750-Node, ESP32-LED-Node,
+     RPi-DHT11-Node.
+  3. Tạo 3 device với access token cố định (ESP32-BH1750, ESP32-LED, RaspberryPi-DHT11) và đặt
      server attribute inactivityTimeout = 30000 ms: thiết bị im lặng ~30 s thì
      "active" chuyển sang false. Lưu ý:
        - Gói PINGREQ (keepalive MQTT) cũng tính là hoạt động: thiết bị còn giữ kết nối
