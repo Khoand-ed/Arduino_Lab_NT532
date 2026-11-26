@@ -9,26 +9,43 @@ Cấu hình tự động ThingsBoard CE chạy local (Docker) qua REST API, theo
      server attribute inactivityTimeout = 30000 ms: thiết bị im lặng ~30 s thì
      "active" chuyển sang false. Lưu ý:
        - Gói PINGREQ (keepalive MQTT) cũng tính là hoạt động: thiết bị còn giữ kết nối
-         MQTT thì vẫn "active" dù không gửi telemetry; mất điện / mất Wi-Fi / ngắt kết
-         nối thì mới chuyển sang không hoạt động.
-       - ThingsBoard kiểm tra trạng thái theo chu kỳ DEFAULT_STATE_CHECK_INTERVAL (mặc
-         định 60 s), nên thực tế mất 30..90 s.
+         MQTT thì vẫn "active" dù không gửi telemetry, VỚI ĐIỀU KIỆN keepalive nhỏ hơn hẳn
+         30 s (ESP32 15 s, Raspberry Pi 10 s; để 30 s thì cứ ~1 phút lại báo Offline/Online).
+         Mất điện / mất Wi-Fi / ngắt kết nối thì mới chuyển sang không hoạt động.
+       - ThingsBoard kiểm tra trạng thái theo chu kỳ DEFAULT_STATE_CHECK_INTERVAL. File
+         LAB4/server/docker-compose.yml đặt 10 s (mặc định của ThingsBoard là 60 s), nên
+         "active" chuyển sang false khoảng 30..40 s sau khi thiết bị ngắt kết nối.
   4. Bổ sung Root Rule Chain (giữ nguyên các luồng mặc định): mỗi sự kiện
-     CONNECTED / DISCONNECTED / ACTIVE / INACTIVE và mỗi lệnh RPC server -> thiết bị
-     (vd "RPC setLed1(true)") được lưu thành telemetry "event" của thiết bị.
-     Đây là nguồn dữ liệu cho bảng nhật ký hệ thống trên dashboard.
-  5. In tóm tắt: URL, tài khoản đăng nhập, id và access token của thiết bị.
+     CONNECTED / DISCONNECTED / ACTIVE / INACTIVE, mỗi lệnh RPC server -> thiết bị
+     (vd "RPC setLed1(true)") và kết quả của lệnh ("RPC DELIVERED" / "RPC OK: true",
+     "RPC FAILED: NO_ACTIVE_CONNECTION" khi thiết bị offline) được
+     lưu thành telemetry "sysEvent" của thiết bị. Thiết bị tự gửi sự kiện của mình (BOOT,
+     MQTT RECONNECT, DHT11 read error...) vào key "event". Hai key tách riêng và mỗi loại
+     sự kiện có ts riêng nên các dòng nhật ký không ghi đè nhau khi đến cùng mili giây.
+     "sysEvent" + "event" là nguồn dữ liệu cho bảng nhật ký hệ thống trên dashboard.
+  5. Nạp widgets bundle "Nhom 10 - Lab 4" (widgets/*.json): widget tự viết cho tiêu đề/điều
+     hướng, tổng quan kết nối, thẻ giá trị cảm biến, bảng Logs (lọc + tải CSV/Excel).
+     Widget type nhận biết theo fqn, bundle theo alias/tiêu đề: có rồi thì cập nhật tại chỗ.
+  6. Nạp dashboard "Lab 4 - IoT Dashboard (Nhom 10)" (dashboard_lab4.json), cập nhật tại chỗ
+     theo tiêu đề. Entity alias lọc theo TÊN thiết bị / DEVICE PROFILE nên không chứa UUID cố
+     định (kiểm tra trước mỗi alias tìm thấy bao nhiêu thiết bị). Đặt làm home dashboard của
+     tenant: đăng nhập tenant admin sẽ thấy dashboard ngay ở trang Home.
+     Lưu ý: file JSON là bản gốc. Sửa dashboard / widget trên web thì Export đè lại vào file
+     (dashboard_lab4.json, widgets/...), nếu không lần chạy sau sẽ ghi đè bản trên web.
+  7. In tóm tắt: URL, tài khoản đăng nhập, id và access token của thiết bị, link dashboard.
 
 Chạy lại nhiều lần vẫn an toàn (idempotent): phần nào đã có thì bỏ qua, chỉ sửa
-phần khác với config.json. Lần chạy thứ hai sẽ báo "không có thay đổi".
+phần khác với config.json / file JSON. Lần chạy thứ hai sẽ báo "không có thay đổi".
 
 Cài thư viện:  pip install -r requirements.txt
 Chạy:          python provision.py
                python provision.py --url http://localhost:8080 --config config.json
+               python provision.py --no-home-dashboard     # không đặt home dashboard
 """
 
 import argparse
 import copy
+import glob
 import json
 import os
 import sys
@@ -36,7 +53,10 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 
-DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CONFIG = os.path.join(BASE_DIR, "config.json")
+WIDGETS_DIR = os.path.join(BASE_DIR, "widgets")              # widgets bundle (định dạng export của ThingsBoard)
+DASHBOARD_FILE = os.path.join(BASE_DIR, "dashboard_lab4.json")
 
 # Tiền tố tên các rule node do script này thêm vào Root Rule Chain (dùng để nhận biết
 # khi chạy lại, không thêm trùng)
@@ -108,15 +128,22 @@ class TbClient:
 
     def find_in_pages(self, path, predicate, params=None, page_size=100):
         """Duyệt API dạng phân trang (pageSize/page), trả về phần tử đầu tiên thỏa predicate."""
-        page = 0
+        found = self.find_all_in_pages(path, predicate, params, page_size, first_only=True)
+        return found[0] if found else None
+
+    def find_all_in_pages(self, path, predicate, params=None, page_size=100, first_only=False):
+        """Duyệt API dạng phân trang, trả về danh sách mọi phần tử thỏa predicate."""
+        result, page = [], 0
         while True:
             query = dict(params or {}, pageSize=page_size, page=page)
             data = self.get(path, params=query)
             for item in data.get("data", []):
                 if predicate(item):
-                    return item
+                    result.append(item)
+                    if first_only:
+                        return result
             if not data.get("hasNext"):
-                return None
+                return result
             page += 1
 
 
@@ -140,6 +167,7 @@ class Context:
         self.profile_ids = {}         # tên device profile -> id
         self.devices = {}             # tên device -> {"id", "token", "label", "profile"}
         self.root_rule_chain_id = None
+        self.set_home_dashboard = True  # tắt bằng --no-home-dashboard
         self.changes = 0              # số thay đổi đã thực hiện trong lần chạy này
         self.summary_extra = []       # các bước sau (widget, dashboard) thêm dòng tóm tắt
 
@@ -306,8 +334,15 @@ def step_devices(ctx):
 
 
 # ----------------------------------------------------------------------------
-# Bước 4: Root Rule Chain -> telemetry "event" (nhật ký hệ thống)
+# Bước 4: Root Rule Chain -> telemetry "sysEvent" (nhật ký hệ thống)
 # ----------------------------------------------------------------------------
+# Key telemetry chứa sự kiện do ThingsBoard sinh ra (rule chain ghi). Tách riêng khỏi key
+# "event" mà thiết bị tự gửi (BOOT, MQTT RECONNECT, DHT11 read error...): ThingsBoard lưu mỗi
+# (thiết bị, key, ts) đúng MỘT giá trị, hai bản tin cùng key rơi vào cùng mili giây thì bản
+# sau ghi đè bản trước. Khi thiết bị vừa kết nối, CONNECTED, ACTIVE và BOOT đến cách nhau
+# 0..30 ms nên trước đây thỉnh thoảng mất một dòng nhật ký.
+SYS_EVENT_KEY = "sysEvent"
+
 # Tên quan hệ (relation) đầu ra của node "Message Type Switch" (ThingsBoard 4.3)
 EVENT_RELATIONS = [
     "Connect Event",          # CONNECT_EVENT      -> "CONNECTED"
@@ -320,71 +355,151 @@ EVENT_RELATIONS = [
 SWITCH_NODE_TYPE = "org.thingsboard.rule.engine.filter.TbMsgTypeSwitchNode"
 SCRIPT_NODE_TYPE = "org.thingsboard.rule.engine.transform.TbTransformMsgNode"
 TIMESERIES_NODE_TYPE = "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode"
+RPC_CALL_NODE_TYPE = "org.thingsboard.rule.engine.rpc.TbSendRPCRequestNode"
 
 EVENT_NODE_NAME = RULE_NODE_PREFIX + "Event to telemetry"
+RPC_OK_NODE_NAME = RULE_NODE_PREFIX + "RPC OK to telemetry"
+RPC_FAILED_NODE_NAME = RULE_NODE_PREFIX + "RPC failed to telemetry"
 SAVE_NODE_NAME = RULE_NODE_PREFIX + "Save event"
+# Đầu ra của node "RPC Call Request" (gửi lệnh tới thiết bị), mỗi đầu ra vào một node script
+# riêng: Success = thiết bị đã trả lời (two-way) / đã nhận lệnh (one-way), Failure = lỗi
+# (thiết bị offline, quá thời gian chờ...)
+RPC_RESULT_NODES = {RPC_OK_NODE_NAME: "Success", RPC_FAILED_NODE_NAME: "Failure"}
 
-# TBEL: đổi sự kiện thành bản tin telemetry {"event": "..."}. Node "save time series"
-# chỉ nhận bản tin loại POST_TELEMETRY_REQUEST nên phải đổi msgType.
+# Script đổi sự kiện thành bản tin telemetry {"ts": ..., "values": {"sysEvent": "..."}}.
+# Node "save time series" chỉ nhận bản tin loại POST_TELEMETRY_REQUEST nên phải đổi msgType.
+# ts = thời điểm rule chain xử lý, làm tròn xuống bội số 10 ms rồi cộng một "ô" riêng cho
+# từng loại sự kiện: hai loại khác nhau không bao giờ trùng ts (không ghi đè nhau), trong
+# cùng 10 ms vẫn đúng thứ tự:
+#   DISCONNECTED +1, INACTIVE +2, CONNECTED +3, ACTIVE +4, RPC (lệnh) +5, RPC (kết quả) +6
 # Với RPC từ server (REST /api/rpc/oneway|twoway), msg.params là chuỗi JSON của params:
 #   true -> "RPC setLed1(true)", "on" -> "RPC setLed2(\"on\")",
 #   {"led":1,"state":true} -> "RPC setLed({\"led\":1,\"state\":true})", không có -> "RPC getLeds()"
 EVENT_SCRIPT_TBEL = """\
-var event = msgType;
-if (msgType == "CONNECT_EVENT") {
-    event = "CONNECTED";
-} else if (msgType == "DISCONNECT_EVENT") {
-    event = "DISCONNECTED";
-} else if (msgType == "ACTIVITY_EVENT") {
-    event = "ACTIVE";
+var text = msgType;
+var slot = 0;
+if (msgType == "DISCONNECT_EVENT") {
+    text = "DISCONNECTED";
+    slot = 1;
 } else if (msgType == "INACTIVITY_EVENT") {
-    event = "INACTIVE";
+    text = "INACTIVE";
+    slot = 2;
+} else if (msgType == "CONNECT_EVENT") {
+    text = "CONNECTED";
+    slot = 3;
+} else if (msgType == "ACTIVITY_EVENT") {
+    text = "ACTIVE";
+    slot = 4;
 } else if (msgType == "RPC_CALL_FROM_SERVER_TO_DEVICE") {
     var params = msg.params;
     if (params == null || params == "null") {
         params = "";
     }
-    event = "RPC " + msg.method + "(" + params + ")";
+    text = "RPC " + msg.method + "(" + params + ")";
+    slot = 5;
 }
-return {msg: {event: event}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+var now = Date.now();
+var ts = now - (now % 10) + slot;
+return {msg: {ts: ts, values: {sysEvent: text}}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+
+# Kết quả lệnh RPC, msg = nội dung thiết bị trả lời (Success) hoặc {"error": "<lỗi>"} (Failure):
+#   Success, RPC two-way (REST /api/rpc/twoway) -> "RPC OK: true",
+#            "RPC OK: {\"led1\":false,\"led2\":true}",
+#            "RPC OK: {\"error\":\"unknown method\"}" (thiết bị trả lời là không biết lệnh)
+#   Success, RPC one-way (nút gạt LED trên dashboard, REST /api/rpc/oneway): không có nội dung
+#            trả lời, ThingsBoard chỉ báo đã gửi tới thiết bị -> "RPC DELIVERED"
+#   Failure -> "RPC FAILED: NO_ACTIVE_CONNECTION" (thiết bị offline), "RPC FAILED: TIMEOUT"
+RPC_OK_SCRIPT_TBEL = """\
+var text = "RPC OK: " + JSON.stringify(msg);
+if (metadata.oneway == "true") {
+    text = "RPC DELIVERED";
+}
+var now = Date.now();
+var ts = now - (now % 10) + 6;
+return {msg: {ts: ts, values: {sysEvent: text}}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+
+RPC_FAILED_SCRIPT_TBEL = """\
+var reason = JSON.stringify(msg);
+if (isMap(msg) && msg.error != null) {
+    reason = msg.error;
+}
+var now = Date.now();
+var ts = now - (now % 10) + 6;
+return {msg: {ts: ts, values: {sysEvent: "RPC FAILED: " + reason}}, metadata: metadata,
+        msgType: "POST_TELEMETRY_REQUEST"};"""
 
 # Bản JavaScript tương đương (chỉ dùng khi đổi scriptLang sang JS trên giao diện)
 EVENT_SCRIPT_JS = """\
-var names = {CONNECT_EVENT: "CONNECTED", DISCONNECT_EVENT: "DISCONNECTED",
-             ACTIVITY_EVENT: "ACTIVE", INACTIVITY_EVENT: "INACTIVE"};
-var event = names[msgType] || msgType;
+var names = {DISCONNECT_EVENT: ["DISCONNECTED", 1], INACTIVITY_EVENT: ["INACTIVE", 2],
+             CONNECT_EVENT: ["CONNECTED", 3], ACTIVITY_EVENT: ["ACTIVE", 4]};
+var item = names[msgType] || [msgType, 0];
+var text = item[0], slot = item[1];
 if (msgType === "RPC_CALL_FROM_SERVER_TO_DEVICE") {
     var params = msg.params;
     if (params === undefined || params === null || params === "null") { params = ""; }
     if (typeof params !== "string") { params = JSON.stringify(params); }
-    event = "RPC " + msg.method + "(" + params + ")";
+    text = "RPC " + msg.method + "(" + params + ")";
+    slot = 5;
 }
-return {msg: {event: event}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+var now = Date.now();
+var ts = now - (now % 10) + slot;
+return {msg: {ts: ts, values: {sysEvent: text}}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+
+RPC_OK_SCRIPT_JS = """\
+var text = metadata.oneway === "true" ? "RPC DELIVERED" : "RPC OK: " + JSON.stringify(msg);
+var now = Date.now();
+var ts = now - (now % 10) + 6;
+return {msg: {ts: ts, values: {sysEvent: text}}, metadata: metadata, msgType: "POST_TELEMETRY_REQUEST"};"""
+
+RPC_FAILED_SCRIPT_JS = """\
+var reason = (msg && typeof msg === "object" && msg.error) ? msg.error : JSON.stringify(msg);
+var now = Date.now();
+var ts = now - (now % 10) + 6;
+return {msg: {ts: ts, values: {sysEvent: "RPC FAILED: " + reason}}, metadata: metadata,
+        msgType: "POST_TELEMETRY_REQUEST"};"""
+
+# Cấu hình mong muốn của các node Lab4 (dùng cả để tạo lẫn để kiểm tra khi chạy lại)
+SCRIPT_CONFIGS = {
+    EVENT_NODE_NAME: {"scriptLang": "TBEL", "tbelScript": EVENT_SCRIPT_TBEL, "jsScript": EVENT_SCRIPT_JS},
+    RPC_OK_NODE_NAME: {"scriptLang": "TBEL", "tbelScript": RPC_OK_SCRIPT_TBEL, "jsScript": RPC_OK_SCRIPT_JS},
+    RPC_FAILED_NODE_NAME: {"scriptLang": "TBEL", "tbelScript": RPC_FAILED_SCRIPT_TBEL,
+                           "jsScript": RPC_FAILED_SCRIPT_JS},
+}
+# useServerTs = False: dùng ts do script đặt (không phải giờ lúc lưu)
+SAVE_NODE_CONFIG = {"defaultTTL": 0, "useServerTs": False, "processingSettings": {"type": "ON_EVERY_MESSAGE"}}
 
 
-def desired_lab4_nodes(layout_x, layout_y):
-    """2 rule node cần thêm: script đổi sự kiện -> telemetry, rồi lưu time series."""
-    return [
-        {
-            "type": SCRIPT_NODE_TYPE,
-            "name": EVENT_NODE_NAME,
-            "configurationVersion": 0,
-            "configuration": {"scriptLang": "TBEL", "tbelScript": EVENT_SCRIPT_TBEL,
-                              "jsScript": EVENT_SCRIPT_JS},
-            "additionalInfo": {"layoutX": layout_x, "layoutY": layout_y,
-                               "description": "Lab 4: sự kiện kết nối/hoạt động và lệnh RPC "
-                                              "-> telemetry \"event\" (nhật ký hệ thống)"},
-        },
-        {
-            "type": TIMESERIES_NODE_TYPE,
-            "name": SAVE_NODE_NAME,
-            "configurationVersion": 1,
-            "configuration": {"defaultTTL": 0, "useServerTs": True,
-                              "processingSettings": {"type": "ON_EVERY_MESSAGE"}},
-            "additionalInfo": {"layoutX": layout_x + 300, "layoutY": layout_y,
-                               "description": "Lab 4: lưu telemetry \"event\""},
-        },
-    ]
+def script_node(name, layout_x, layout_y, description):
+    return {
+        "type": SCRIPT_NODE_TYPE,
+        "name": name,
+        "configurationVersion": 0,
+        "configuration": copy.deepcopy(SCRIPT_CONFIGS[name]),
+        "additionalInfo": {"layoutX": layout_x, "layoutY": layout_y, "description": description},
+    }
+
+
+def desired_lab4_nodes(event_xy, rpc_xy):
+    """Các rule node cần thêm: script đổi sự kiện -> telemetry, 2 script kết quả RPC (nếu có node
+    RPC Call Request ở vị trí rpc_xy), rồi một node lưu time series dùng chung."""
+    nodes = [script_node(EVENT_NODE_NAME, *event_xy,
+                         "Lab 4: sự kiện kết nối/hoạt động và lệnh RPC -> telemetry "
+                         f"\"{SYS_EVENT_KEY}\" (nhật ký hệ thống)")]
+    if rpc_xy:
+        rpc_x, rpc_y = rpc_xy
+        nodes.append(script_node(RPC_OK_NODE_NAME, rpc_x + 300, rpc_y - 68,
+                                 f"Lab 4: thiết bị đã trả lời lệnh RPC -> telemetry \"{SYS_EVENT_KEY}\""))
+        nodes.append(script_node(RPC_FAILED_NODE_NAME, rpc_x + 600, rpc_y,
+                                 f"Lab 4: lệnh RPC lỗi (offline, quá thời gian) -> telemetry \"{SYS_EVENT_KEY}\""))
+    nodes.append({
+        "type": TIMESERIES_NODE_TYPE,
+        "name": SAVE_NODE_NAME,
+        "configurationVersion": 1,
+        "configuration": copy.deepcopy(SAVE_NODE_CONFIG),
+        "additionalInfo": {"layoutX": event_xy[0] + 300, "layoutY": event_xy[1],
+                           "description": f"Lab 4: lưu telemetry \"{SYS_EVENT_KEY}\" (ts do script đặt)"},
+    })
+    return nodes
 
 
 def connection_signature(nodes, connections):
@@ -395,6 +510,14 @@ def connection_signature(nodes, connections):
         if source.startswith(RULE_NODE_PREFIX) or target.startswith(RULE_NODE_PREFIX):
             result.add((source, target, conn["type"]))
     return result
+
+
+def node_up_to_date(existing, desired):
+    """So sánh node Lab4 đang có với bản mong muốn (loại node + các trường cấu hình quan trọng)."""
+    if existing is None or existing["type"] != desired["type"]:
+        return False
+    current = existing.get("configuration") or {}
+    return all(current.get(key) == value for key, value in desired["configuration"].items())
 
 
 def build_rule_chain_metadata(metadata):
@@ -411,22 +534,38 @@ def build_rule_chain_metadata(metadata):
         raise SystemExit("Root Rule Chain không có node Message Type Switch, không thể bổ sung.")
     switch_name = nodes[switch_index]["name"]
 
-    # Vị trí vẽ: cột các node nhận từ switch, ngay dưới node thấp nhất
+    # Node "RPC Call Request" nhận lệnh RPC từ switch (không có thì bỏ qua phần ghi kết quả RPC)
+    rpc_candidates = [i for i, n in enumerate(nodes) if n["type"] == RPC_CALL_NODE_TYPE]
+    rpc_index = next((c["toIndex"] for c in connections
+                      if c["fromIndex"] == switch_index and c["type"] == "RPC Request to Device"
+                      and c["toIndex"] in rpc_candidates), rpc_candidates[0] if rpc_candidates else None)
+
+    # Vị trí vẽ: cột các node nhận từ switch, ngay dưới node thấp nhất; các node kết quả RPC
+    # đặt bên phải node RPC Call Request
     others = [n for n in nodes if not n["name"].startswith(RULE_NODE_PREFIX)]
-    targets = [nodes[c["toIndex"]] for c in connections if c["fromIndex"] == switch_index]
+    targets = [nodes[c["toIndex"]] for c in connections if c["fromIndex"] == switch_index
+               and not nodes[c["toIndex"]]["name"].startswith(RULE_NODE_PREFIX)]
     layout_x = max((n.get("additionalInfo") or {}).get("layoutX", 825) for n in targets) if targets else 825
     layout_y = max(((n.get("additionalInfo") or {}).get("layoutY", 0) for n in others), default=0) + 112
-    new_nodes = desired_lab4_nodes(layout_x, layout_y)
+    rpc_xy = None
+    if rpc_index is not None:
+        info = nodes[rpc_index].get("additionalInfo") or {}
+        rpc_xy = (info.get("layoutX", layout_x), info.get("layoutY", layout_y - 112))
+    new_nodes = desired_lab4_nodes((layout_x, layout_y), rpc_xy)
+
     wanted_connections = {(switch_name, EVENT_NODE_NAME, rel) for rel in EVENT_RELATIONS}
     wanted_connections.add((EVENT_NODE_NAME, SAVE_NODE_NAME, "Success"))
+    if rpc_index is not None:
+        rpc_name = nodes[rpc_index]["name"]
+        for name, rel in RPC_RESULT_NODES.items():
+            wanted_connections.add((rpc_name, name, rel))
+            wanted_connections.add((name, SAVE_NODE_NAME, "Success"))
 
-    # Đã đúng chưa? (cùng tên + loại node, cùng script, cùng tập kết nối)
+    # Đã đúng chưa? (cùng tên + loại node, cùng script / cấu hình lưu, cùng tập kết nối)
     existing = {n["name"]: n for n in nodes if n["name"].startswith(RULE_NODE_PREFIX)}
     up_to_date = (
         set(existing) == {n["name"] for n in new_nodes}
-        and all(existing[n["name"]]["type"] == n["type"] for n in new_nodes)
-        and (existing[EVENT_NODE_NAME].get("configuration") or {}).get("tbelScript") == EVENT_SCRIPT_TBEL
-        and (existing[EVENT_NODE_NAME].get("configuration") or {}).get("scriptLang") == "TBEL"
+        and all(node_up_to_date(existing.get(n["name"]), n) for n in new_nodes)
         and connection_signature(nodes, connections) == wanted_connections
     )
     if up_to_date:
@@ -443,11 +582,17 @@ def build_rule_chain_metadata(metadata):
         for conn in connections
         if conn["fromIndex"] in index_map and conn["toIndex"] in index_map
     ]
-    event_index, save_index = len(kept), len(kept) + 1
+    new_index = {node["name"]: len(kept) + i for i, node in enumerate(new_nodes)}
     new_switch_index = index_map[switch_index]
-    kept_connections += [{"fromIndex": new_switch_index, "toIndex": event_index, "type": rel}
+    kept_connections += [{"fromIndex": new_switch_index, "toIndex": new_index[EVENT_NODE_NAME], "type": rel}
                          for rel in EVENT_RELATIONS]
-    kept_connections.append({"fromIndex": event_index, "toIndex": save_index, "type": "Success"})
+    kept_connections.append({"fromIndex": new_index[EVENT_NODE_NAME], "toIndex": new_index[SAVE_NODE_NAME],
+                             "type": "Success"})
+    if rpc_index is not None:
+        for name, rel in RPC_RESULT_NODES.items():
+            kept_connections.append({"fromIndex": index_map[rpc_index], "toIndex": new_index[name], "type": rel})
+            kept_connections.append({"fromIndex": new_index[name], "toIndex": new_index[SAVE_NODE_NAME],
+                                     "type": "Success"})
 
     result = copy.deepcopy(metadata)
     result["nodes"] = kept + new_nodes
@@ -471,8 +616,11 @@ def step_rule_chain(ctx):
     ctx.root_rule_chain_id = root["id"]["id"]
     metadata = api.get(f"/api/ruleChain/{ctx.root_rule_chain_id}/metadata")
     new_metadata, up_to_date = build_rule_chain_metadata(metadata)
+    lab4_names = " / ".join(n["name"] for n in new_metadata["nodes"] if n["name"].startswith(RULE_NODE_PREFIX))
+    if RPC_OK_NODE_NAME not in lab4_names:
+        print("  [!] Không thấy node RPC Call Request: nhật ký sẽ không có dòng kết quả lệnh RPC")
     if up_to_date:
-        ctx.unchanged(f"\"{root['name']}\" đã có node {EVENT_NODE_NAME} / {SAVE_NODE_NAME}")
+        ctx.unchanged(f"\"{root['name']}\" đã có node {lab4_names}")
         return
 
     api.post("/api/ruleChain/metadata", json=new_metadata)
@@ -480,13 +628,180 @@ def step_rule_chain(ctx):
     _, ok = build_rule_chain_metadata(saved)
     if not ok:
         raise SystemExit("Đã lưu Root Rule Chain nhưng kiểm tra lại không khớp, xem trên giao diện web.")
-    ctx.changed(f"Bổ sung \"{root['name']}\": {EVENT_NODE_NAME} -> {SAVE_NODE_NAME}")
+    ctx.changed(f"Bổ sung \"{root['name']}\": {lab4_names}")
     for line in describe_connections(saved):
         print(f"      {line}")
 
 
 # ----------------------------------------------------------------------------
-# Bước 5: tóm tắt
+# Bước 5: widgets bundle (widget tự viết, file widgets/*.json)
+# ----------------------------------------------------------------------------
+# Các trường của widget type / bundle được so sánh để quyết định có cần cập nhật không
+WIDGET_TYPE_FIELDS = ("name", "description", "tags", "deprecated", "scada", "image", "descriptor")
+BUNDLE_FIELDS = ("alias", "title", "description", "order", "image", "scada")
+
+
+def load_json(path):
+    with open(path, encoding="utf-8") as file:
+        return json.load(file)
+
+
+def same_fields(current, desired, fields):
+    """True nếu current có cùng giá trị với desired ở mọi trường trong fields (thiếu = None)."""
+    return all(current.get(field) == desired.get(field) for field in fields)
+
+
+def comparable_widget_type(widget_type):
+    """Bản sao để so sánh: defaultConfig (chuỗi JSON, server tự định dạng lại) -> object."""
+    result = {field: copy.deepcopy(widget_type.get(field)) for field in WIDGET_TYPE_FIELDS}
+    descriptor = result.get("descriptor") or {}
+    if isinstance(descriptor.get("defaultConfig"), str):
+        try:
+            descriptor["defaultConfig"] = json.loads(descriptor["defaultConfig"])
+        except ValueError:
+            pass
+    return result
+
+
+def ensure_widget_type(ctx, desired):
+    """Tạo / cập nhật widget type của tenant theo fqn."""
+    api = ctx.tenant_api
+    fqn = desired["fqn"]
+    # Tra cứu theo fqn đầy đủ: "tenant.<fqn>" (widget của tenant), "system.<fqn>" (widget hệ thống)
+    existing = api.get("/api/widgetType", params={"fqn": "tenant." + fqn}, allow_404=True)
+    if existing:
+        # Bản đầy đủ (có description, tags, image)
+        existing = api.get(f"/api/widgetType/{existing['id']['id']}")
+    if existing and comparable_widget_type(existing) == comparable_widget_type(desired):
+        ctx.unchanged(f"Widget type {fqn} đã đúng")
+        return
+    body = {field: desired.get(field) for field in WIDGET_TYPE_FIELDS}
+    body["fqn"] = fqn
+    if existing:
+        body.update({"id": existing["id"], "version": existing.get("version")})
+    api.post("/api/widgetType", json=body)
+    ctx.changed(f"{'Cập nhật' if existing else 'Tạo'} widget type {fqn} ({desired['name']})")
+
+
+def ensure_widgets_bundle(ctx, data, file_name):
+    api = ctx.tenant_api
+    desired = data["widgetsBundle"]
+    title, alias = desired["title"], desired.get("alias")
+    matches = api.find_all_in_pages(
+        "/api/widgetsBundles",
+        lambda b: (b.get("tenantId") or {}).get("id") == ctx.tenant_id
+        and (b.get("alias") == alias or b.get("title") == title),
+        params={"tenantOnly": "true"})
+    if len(matches) > 1:
+        print(f"  [!] Có {len(matches)} widgets bundle trùng \"{title}\", chỉ cập nhật bản đầu tiên "
+              "(xóa bản thừa trên web: Resources > Widgets library)")
+    bundle = matches[0] if matches else None
+    if bundle is None:
+        bundle = api.post("/api/widgetsBundle", json={field: desired.get(field) for field in BUNDLE_FIELDS})
+        ctx.changed(f"Tạo widgets bundle \"{title}\" ({file_name})")
+    elif not same_fields(bundle, desired, BUNDLE_FIELDS):
+        bundle.update({field: desired.get(field) for field in BUNDLE_FIELDS})
+        bundle = api.post("/api/widgetsBundle", json=bundle)
+        ctx.changed(f"Cập nhật thông tin widgets bundle \"{title}\"")
+    else:
+        ctx.unchanged(f"Widgets bundle \"{title}\" đã có")
+    bundle_id = bundle["id"]["id"]
+
+    for widget_type in data.get("widgetTypes", []):
+        ensure_widget_type(ctx, widget_type)
+
+    # Danh sách widget trong bundle (đúng thứ tự trong file)
+    wanted = [w["fqn"] for w in data.get("widgetTypes", [])]
+    current = api.get("/api/widgetTypeFqns", params={"widgetsBundleId": bundle_id}) or []
+    if list(current) != wanted:
+        api.post(f"/api/widgetsBundle/{bundle_id}/widgetTypeFqns", json=wanted)
+        ctx.changed(f"Gán {len(wanted)} widget vào bundle \"{title}\": {', '.join(wanted)}")
+    else:
+        ctx.unchanged(f"Bundle \"{title}\" đủ {len(wanted)} widget")
+    ctx.summary_extra.append(f"Widgets bundle    : {title} ({len(wanted)} widget)")
+
+
+def step_import_widgets_bundle(ctx):
+    files = sorted(glob.glob(os.path.join(WIDGETS_DIR, "*.json")))
+    if not files:
+        ctx.unchanged(f"Không có file widgets bundle trong {WIDGETS_DIR}")
+        return
+    for path in files:
+        data = load_json(path)
+        if "widgetsBundle" not in data:
+            print(f"  [!] Bỏ qua {os.path.basename(path)}: không phải file export widgets bundle")
+            continue
+        ensure_widgets_bundle(ctx, data, os.path.basename(path))
+
+
+# ----------------------------------------------------------------------------
+# Bước 6: dashboard (file dashboard_lab4.json) + home dashboard của tenant
+# ----------------------------------------------------------------------------
+DASHBOARD_FIELDS = ("title", "image", "mobileHide", "mobileOrder", "configuration")
+
+
+def check_entity_aliases(ctx, configuration):
+    """Đếm số thiết bị mỗi entity alias tìm được (alias lọc theo tên / device profile)."""
+    api = ctx.tenant_api
+    for alias in (configuration.get("entityAliases") or {}).values():
+        count = api.post("/api/entitiesQuery/count", json={"entityFilter": alias["filter"]})
+        if count:
+            ctx.unchanged(f"Alias \"{alias['alias']}\" -> {count} thiết bị")
+        else:
+            print(f"  [!] Alias \"{alias['alias']}\" không tìm thấy thiết bị nào "
+                  f"(filter {json.dumps(alias['filter'], ensure_ascii=False)})")
+
+
+def step_import_dashboard(ctx):
+    api = ctx.tenant_api
+    if not os.path.exists(DASHBOARD_FILE):
+        ctx.unchanged(f"Không có {DASHBOARD_FILE}")
+        return
+    desired = load_json(DASHBOARD_FILE)
+    title = desired["title"]
+    check_entity_aliases(ctx, desired["configuration"])
+
+    matches = api.find_all_in_pages("/api/tenant/dashboards", lambda d: d.get("title") == title,
+                                    params={"textSearch": title})
+    if len(matches) > 1:
+        print(f"  [!] Có {len(matches)} dashboard tên \"{title}\", chỉ cập nhật bản tạo sớm nhất "
+              "(xóa bản thừa trên web: Dashboards)")
+        matches.sort(key=lambda d: d.get("createdTime", 0))
+    body = {field: desired.get(field) for field in DASHBOARD_FIELDS}
+    if not matches:
+        dashboard = api.post("/api/dashboard", json=body)
+        ctx.changed(f"Tạo dashboard \"{title}\"")
+    else:
+        dashboard = api.get(f"/api/dashboard/{matches[0]['id']['id']}")
+        if same_fields(dashboard, body, DASHBOARD_FIELDS):
+            ctx.unchanged(f"Dashboard \"{title}\" đã đúng như {os.path.basename(DASHBOARD_FILE)}")
+        else:
+            dashboard.update(body)
+            dashboard = api.post("/api/dashboard", json=dashboard)
+            ctx.changed(f"Cập nhật dashboard \"{title}\" theo {os.path.basename(DASHBOARD_FILE)}")
+    dashboard_id = dashboard["id"]["id"]
+
+    if ctx.set_home_dashboard:
+        home = api.get("/api/tenant/dashboard/home/info") or {}
+        if ((home.get("dashboardId") or {}).get("id") != dashboard_id
+                or home.get("hideDashboardToolbar") is not False):
+            api.post("/api/tenant/dashboard/home/info", json={
+                "dashboardId": entity_id("DASHBOARD", dashboard_id),
+                "hideDashboardToolbar": False,        # giữ thanh công cụ (chọn khoảng thời gian)
+            })
+            ctx.changed("Đặt làm home dashboard của tenant (trang Home sau khi đăng nhập)")
+        else:
+            ctx.unchanged("Đã là home dashboard của tenant")
+
+    states = desired["configuration"].get("states") or {}
+    ctx.summary_extra.append(f"Dashboard         : {title}")
+    ctx.summary_extra.append(f"                    {ctx.base_url}/dashboards/{dashboard_id}")
+    ctx.summary_extra.append("                    state: " + ", ".join(
+        f"{state.get('name')} ({sid})" for sid, state in states.items()))
+
+
+# ----------------------------------------------------------------------------
+# Bước 7: tóm tắt
 # ----------------------------------------------------------------------------
 def print_summary(ctx):
     cfg = ctx.config
@@ -512,7 +827,7 @@ def print_summary(ctx):
     if ctx.changes:
         print(f"\nĐã thực hiện {ctx.changes} thay đổi.")
     else:
-        print("\nKhông có thay đổi nào (mọi thứ đã đúng như config.json).")
+        print("\nKhông có thay đổi nào (mọi thứ đã đúng như config.json và các file JSON).")
 
 
 # ----------------------------------------------------------------------------
@@ -523,11 +838,9 @@ STEPS = [
     ("1. Tenant admin", step_tenant_admin),
     ("2. Device profile", step_device_profiles),
     ("3. Device, access token, inactivityTimeout", step_devices),
-    ("4. Root Rule Chain (telemetry \"event\")", step_rule_chain),
-    # TODO (dashboard): thêm các bước dưới đây, mỗi hàm nhận ctx, dùng ctx.tenant_api,
-    # ctx.devices[<tên>]["id"], và ghi thêm dòng tóm tắt vào ctx.summary_extra
-    # ("5. Widgets bundle", step_import_widgets_bundle),   # widgets/*.json
-    # ("6. Dashboard", step_import_dashboard),             # dashboard_lab4.json
+    ("4. Root Rule Chain (telemetry \"sysEvent\")", step_rule_chain),
+    ("5. Widgets bundle (widgets/*.json)", step_import_widgets_bundle),
+    ("6. Dashboard (dashboard_lab4.json)", step_import_dashboard),
 ]
 
 
@@ -541,13 +854,16 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", line_buffering=True)
-    parser = argparse.ArgumentParser(description="Lab 4: khởi tạo ThingsBoard (tenant, device, rule chain)")
+    parser = argparse.ArgumentParser(description="Lab 4: khởi tạo ThingsBoard (tenant, device, rule chain, widget, dashboard)")
     parser.add_argument("--config", default=DEFAULT_CONFIG, help="đường dẫn config.json")
     parser.add_argument("--url", help="URL ThingsBoard (mặc định lấy tb_url trong config.json)")
+    parser.add_argument("--no-home-dashboard", action="store_true",
+                        help="không đặt dashboard Lab 4 làm home dashboard của tenant")
     args = parser.parse_args()
 
     config = load_config(args.config)
     ctx = Context(config, args.url or config["tb_url"])
+    ctx.set_home_dashboard = not args.no_home_dashboard
     print(f"ThingsBoard: {ctx.base_url}")
     try:
         for title, step in STEPS:

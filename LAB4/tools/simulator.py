@@ -23,8 +23,10 @@ một kết nối MQTT riêng (username = access token), dùng đúng giao thứ
   {"temperature": .., "humidity": ..}; khi kết nối gửi attributes (board, hostname, ip, sensor,
   gpio, firmware) và event "BOOT"; khi dừng gửi event "SHUTDOWN".
 - Attribute "board" có thêm chữ "(simulator)" để phân biệt với thiết bị thật trên dashboard.
-- --errors p: mỗi chu kỳ có xác suất p giả lập lỗi đọc cảm biến (gửi event "BH1750 read error"
-  / "DHT11 read error" thay cho số liệu) để thử bảng nhật ký.
+- --errors p: mỗi chu kỳ có xác suất p giả lập lỗi đọc cảm biến (chu kỳ đó không có số liệu).
+  Giống code thật: lỗi 3 chu kỳ LIÊN TIẾP mới gửi event "BH1750 read error" / "DHT11 read error"
+  (lỗi kéo dài thì nhắc lại mỗi 60 giây), đọc được trở lại thì gửi "BH1750 recovered" /
+  "DHT11 recovered". ESP32 giả lập vẫn gửi rssi khi lỗi. Thử nhanh: --errors 1 (luôn lỗi).
 
 Access token và MQTT host lấy từ thingsboard/config.json (nếu có).
 
@@ -62,6 +64,14 @@ TOPIC_ATTRIBUTES = "v1/devices/me/attributes"
 TOPIC_RPC_SUBSCRIBE = "v1/devices/me/rpc/request/+"
 RPC_REQUEST_PREFIX = "v1/devices/me/rpc/request/"
 RPC_RESPONSE_PREFIX = "v1/devices/me/rpc/response/"
+
+# Keepalive nhỏ hơn hẳn inactivityTimeout (30 s) của thiết bị, giống code thật: khi không có
+# telemetry thì gói PINGREQ vẫn giữ thiết bị "active" (ESP32 15 s, Raspberry Pi 10 s)
+MQTT_KEEPALIVE_S = 10
+
+# Event lỗi cảm biến giống code thật: đủ số chu kỳ lỗi liên tiếp mới gửi, nhắc lại sau mỗi khoảng
+ERROR_THRESHOLD = 3
+ERROR_REPEAT_S = 60.0
 
 PRINT_LOCK = threading.Lock()
 
@@ -208,6 +218,8 @@ class SimDevice:
         self.started = time.monotonic()
         self.boot_event_sent = False
         self.stopping = False
+        self.fail_streak = 0              # số chu kỳ đọc cảm biến lỗi liên tiếp
+        self.error_reported_at = None     # lúc gửi event "... read error" gần nhất
         self.connected = threading.Event()
 
         client_id = f"{self.client_prefix}-{socket.gethostname()}-{os.getpid()}"
@@ -222,7 +234,7 @@ class SimDevice:
     # --- vòng đời kết nối ---
     def start(self):
         log(self.tag, f"Kết nối ThingsBoard {self.host}:{self.port} (token {self.token})...")
-        self.client.connect_async(self.host, self.port, keepalive=30)
+        self.client.connect_async(self.host, self.port, keepalive=MQTT_KEEPALIVE_S)
         self.client.loop_start()
 
     def stop(self):
@@ -286,6 +298,19 @@ class SimDevice:
     def elapsed(self):
         return time.monotonic() - self.started
 
+    def sensor_event(self, ok, sensor):
+        """Event lỗi / phục hồi cảm biến của chu kỳ này (None = không gửi event)."""
+        if ok:
+            self.fail_streak = 0
+            return f"{sensor} recovered" if self.error_reported_at is not None else None
+        self.fail_streak += 1
+        due = self.error_reported_at is None or time.monotonic() - self.error_reported_at >= ERROR_REPEAT_S
+        return f"{sensor} read error" if self.fail_streak >= ERROR_THRESHOLD and due else None
+
+    def sensor_event_sent(self, event):
+        """Ghi nhận event lỗi / phục hồi đã gửi được."""
+        self.error_reported_at = time.monotonic() if event.endswith("read error") else None
+
 
 class SimEsp32(SimDevice):
     """ESP32 DevKit + BH1750 + 2 LED giả lập."""
@@ -322,14 +347,20 @@ class SimEsp32(SimDevice):
 
     def tick(self):
         rssi = max(-90, min(-30, int(round(-58 + self.rng.gauss(0, 3)))))
-        if self.rng.random() < self.error_rate:
-            log(self.tag, "Giả lập lỗi đọc BH1750")
-            self.publish_json(TOPIC_TELEMETRY, {"event": "BH1750 read error", "rssi": rssi})
-            return
-        # Ánh sáng trong phòng dao động chậm 100..600 lx (chu kỳ 5 phút) + nhiễu
-        phase = 2 * math.pi * self.elapsed() / 300
-        lux = max(0.0, 350 + 250 * math.sin(phase) + self.rng.gauss(0, 8))
-        self.publish_json(TOPIC_TELEMETRY, {"light": round(lux, 1), "rssi": rssi})
+        failed = self.rng.random() < self.error_rate
+        event = self.sensor_event(not failed, "BH1750")
+        if failed:
+            log(self.tag, f"Giả lập lỗi đọc BH1750 [{self.fail_streak} lần liên tiếp]")
+            data = {"rssi": rssi}  # vẫn gửi rssi để thiết bị còn "active", giống firmware
+        else:
+            # Ánh sáng trong phòng dao động chậm 100..600 lx (chu kỳ 5 phút) + nhiễu
+            phase = 2 * math.pi * self.elapsed() / 300
+            lux = max(0.0, 350 + 250 * math.sin(phase) + self.rng.gauss(0, 8))
+            data = {"light": round(lux, 1), "rssi": rssi}
+        if event:
+            data["event"] = event
+        if self.publish_json(TOPIC_TELEMETRY, data) and event:
+            self.sensor_event_sent(event)
 
     def publish_led_state(self):
         with self.leds_lock:
@@ -385,15 +416,22 @@ class SimRpi(SimDevice):
         }
 
     def tick(self):
-        if self.rng.random() < self.error_rate:
-            log(self.tag, "Giả lập lỗi đọc DHT11")
-            self.publish_json(TOPIC_TELEMETRY, {"event": "DHT11 read error"})
-            return
-        phase = 2 * math.pi * self.elapsed() / 600  # chu kỳ 10 phút
-        temperature = 28.0 + 1.5 * math.sin(phase) + self.rng.gauss(0, 0.2)
-        humidity = 65.0 - 6.0 * math.sin(phase) + self.rng.gauss(0, 0.5)
-        self.publish_json(TOPIC_TELEMETRY, {"temperature": round(temperature, 1),
-                                            "humidity": round(humidity, 1)})
+        failed = self.rng.random() < self.error_rate
+        event = self.sensor_event(not failed, "DHT11")
+        if failed:
+            log(self.tag, f"Giả lập lỗi đọc DHT11 [{self.fail_streak} lần liên tiếp]")
+            if not event:
+                return  # giống script thật: chu kỳ lỗi không gửi gì
+            data = {"event": event}
+        else:
+            phase = 2 * math.pi * self.elapsed() / 600  # chu kỳ 10 phút
+            temperature = 28.0 + 1.5 * math.sin(phase) + self.rng.gauss(0, 0.2)
+            humidity = 65.0 - 6.0 * math.sin(phase) + self.rng.gauss(0, 0.5)
+            data = {"temperature": round(temperature, 1), "humidity": round(humidity, 1)}
+            if event:
+                data["event"] = event
+        if self.publish_json(TOPIC_TELEMETRY, data) and event:
+            self.sensor_event_sent(event)
 
     def before_stop(self):
         info = self.publish_json(TOPIC_TELEMETRY, {"event": "SHUTDOWN"})

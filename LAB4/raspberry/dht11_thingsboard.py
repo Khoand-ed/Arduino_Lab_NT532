@@ -121,7 +121,10 @@ ERROR_REPEAT_S = 60.0     # lỗi kéo dài thì nhắc lại event sau mỗi kh
 VALID_TEMPERATURE = (-10.0, 70.0)
 VALID_HUMIDITY = (0.0, 100.0)
 
-MQTT_KEEPALIVE_S = 30
+# Keepalive phải nhỏ hơn hẳn inactivityTimeout (30 s) của thiết bị trên ThingsBoard: lúc
+# DHT11 lỗi liên tục chương trình không gửi telemetry, chỉ còn gói PINGREQ giữ thiết bị
+# "active". Để 30 s (bằng timeout) thì cứ khoảng 1 phút dashboard lại báo Offline/Online.
+MQTT_KEEPALIVE_S = 10
 MQTT_RETRY_MIN_S = 1
 MQTT_RETRY_MAX_S = 30
 

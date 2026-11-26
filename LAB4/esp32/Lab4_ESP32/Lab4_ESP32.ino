@@ -8,8 +8,10 @@
  *   bị "ESP32-BH1750", kết nối MQTT tới ThingsBoard (cổng 1883) với
  *   username = access token, không có mật khẩu.
  * - Mỗi 5 giây ESP32 đọc độ sáng từ GY-302 (BH1750) và gửi telemetry
- *   {"light": 123.4, "rssi": -60}. Đọc lỗi thì gửi
- *   {"event": "BH1750 read error", "rssi": -60} và khởi tạo lại cảm biến.
+ *   {"light": 123.4, "rssi": -60}. Đọc lỗi thì chỉ gửi {"rssi": -60} và khởi
+ *   tạo lại cảm biến; lỗi 3 chu kỳ LIÊN TIẾP mới gửi kèm
+ *   {"event": "BH1750 read error"} (lỗi kéo dài thì nhắc lại mỗi 60 giây), đọc
+ *   được trở lại thì gửi kèm {"event": "BH1750 recovered"}.
  * - Mỗi lần kết nối (hoặc kết nối lại) MQTT: gửi client attributes (board,
  *   firmware, ip, mac, sensor, led1, led2) và telemetry {"led1", "led2",
  *   "event"} với event = "BOOT" (lần đầu sau khi khởi động) hoặc "MQTT RECONNECT".
@@ -78,6 +80,10 @@ const int LED1_PIN = 25;
 const int LED2_PIN = 26;
 
 const unsigned long TELEMETRY_INTERVAL_MS = 5000;  // chu kỳ đọc cảm biến và gửi
+// Lỗi đọc BH1750: đủ số chu kỳ lỗi liên tiếp mới gửi event (tránh 12 dòng nhật ký
+// mỗi phút khi cảm biến lỏng dây), lỗi kéo dài thì nhắc lại sau mỗi khoảng này
+const int SENSOR_ERROR_THRESHOLD = 3;
+const unsigned long SENSOR_ERROR_REPEAT_MS = 60000;
 const unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
 const unsigned long MQTT_RETRY_MIN_MS = 2000;
 const unsigned long MQTT_RETRY_MAX_MS = 30000;
@@ -98,6 +104,9 @@ const int LED_PINS[2] = {LED1_PIN, LED2_PIN};
 bool ledState[2] = {false, false};  // [0] = LED1, [1] = LED2
 
 bool lightSensorReady = false;
+int sensorFailStreak = 0;              // số chu kỳ đọc lỗi liên tiếp
+bool sensorErrorReported = false;      // đã gửi event "BH1750 read error" chưa
+unsigned long sensorErrorReportedAtMs = 0;
 bool bootEventSent = false;  // đã gửi event "BOOT" sau khi khởi động chưa
 
 bool wifiConnected = false;
@@ -396,23 +405,46 @@ void sensorCycle() {
   if (valid) {
     Serial.printf("[BH1750] Ánh sáng = %.1f lx\n", lux);
   } else {
-    Serial.println("[BH1750] Lỗi đọc cảm biến, kiểm tra dây SDA/SCL và nguồn 3V3");
+    sensorFailStreak++;
+    Serial.printf("[BH1750] Lỗi đọc cảm biến (%d lần liên tiếp), kiểm tra dây SDA/SCL và nguồn 3V3\n",
+                  sensorFailStreak);
   }
 
   if (mqtt.connected()) {
     JsonDocument doc;
+    bool errorEvent = false;
+    bool recoveredEvent = false;
     if (valid) {
       doc["light"] = round(lux * 10) / 10.0;  // lux, làm tròn 1 chữ số thập phân
+      if (sensorErrorReported) {
+        doc["event"] = "BH1750 recovered";
+        recoveredEvent = true;
+      }
     } else {
-      doc["event"] = "BH1750 read error";
+      bool due = !sensorErrorReported || millis() - sensorErrorReportedAtMs >= SENSOR_ERROR_REPEAT_MS;
+      if (sensorFailStreak >= SENSOR_ERROR_THRESHOLD && due) {
+        doc["event"] = "BH1750 read error";
+        errorEvent = true;
+      }
     }
+    // rssi luôn được gửi: cảm biến lỗi thì ESP32 vẫn gửi dữ liệu, vẫn "active"
     doc["rssi"] = WiFi.RSSI();  // dBm
-    publishJson(TOPIC_TELEMETRY, doc);
+    if (publishJson(TOPIC_TELEMETRY, doc)) {
+      if (errorEvent) {
+        sensorErrorReported = true;
+        sensorErrorReportedAtMs = millis();
+      }
+      if (recoveredEvent) {
+        sensorErrorReported = false;
+      }
+    }
   } else {
     Serial.println("[MQTT] Chưa kết nối ThingsBoard, chưa gửi được số liệu");
   }
 
-  if (!valid) {
+  if (valid) {
+    sensorFailStreak = 0;
+  } else {
     lightSensorReady = reinitLightSensor();
     Serial.println(lightSensorReady ? "[BH1750] Khởi tạo lại thành công"
                                     : "[BH1750] Khởi tạo lại thất bại, thử lại ở chu kỳ sau");
