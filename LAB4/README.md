@@ -415,8 +415,8 @@ Khi nào thiết bị Online/Offline:
 
 ### 7.3. "Biểu đồ" (yêu cầu 4)
 3 biểu đồ time series: Nhiệt độ, Độ ẩm (RaspberryPi-DHT11) và Ánh sáng (ESP32-BH1750).
-- **Mặc định:** chế độ realtime 30 phút gần nhất, không gộp dữ liệu, nên mỗi điểm là một lần đo.
-- **Đổi khoảng thời gian:** dùng biểu tượng đồng hồ trên thanh công cụ dashboard, chọn realtime hoặc history.
+- **Mặc định:** mỗi biểu đồ có khoảng thời gian riêng, realtime 10 phút gần nhất, không gộp dữ liệu, nên mỗi điểm là một lần đo.
+- **Đổi khoảng thời gian:** dùng biểu tượng đồng hồ trên tiêu đề từng biểu đồ, chọn realtime hoặc history.
 - **Phóng to:** bấm nút fullscreen của từng biểu đồ.
 
 ---
